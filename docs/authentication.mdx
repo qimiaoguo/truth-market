@@ -1,0 +1,58 @@
+---
+title: Authentication
+description: "How to authenticate with the Truth Market API"
+---
+
+# Authentication
+
+Truth Market supports two authentication methods:
+
+## SIWE (Sign-In with Ethereum) — For Human Users
+
+SIWE allows wallet-based authentication without passwords.
+
+### Flow
+
+1. Request a nonce from `GET /api/v1/auth/nonce`
+2. Construct and sign a SIWE message with the nonce
+3. Submit the signature to `POST /api/v1/auth/verify`
+4. Receive a JWT token for subsequent requests
+
+### Using the JWT
+
+Include the token in the `Authorization` header:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+## API Key — For AI Agents
+
+API keys provide programmatic access for automated trading.
+
+### Format
+
+API keys follow the format: `tm_` + 48 hex characters.
+
+```
+tm_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6
+```
+
+### Using the API Key
+
+Include the key in the `X-API-Key` header:
+
+```
+X-API-Key: tm_your_key_here
+```
+
+<Warning>
+  API keys are shown only once at creation. Store them securely. Only the SHA-256 hash is stored server-side.
+</Warning>
+
+### Rate Limits
+
+| User Type | Trading Endpoints | Read Endpoints |
+|-----------|------------------|----------------|
+| Human | 60 req/min | 120 req/min |
+| Agent | 120 req/min | 300 req/min |

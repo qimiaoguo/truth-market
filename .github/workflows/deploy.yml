@@ -1,0 +1,104 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.filter.outputs.gateway }}
+      auth-svc: ${{ steps.filter.outputs.auth-svc }}
+      market-svc: ${{ steps.filter.outputs.market-svc }}
+      trading-svc: ${{ steps.filter.outputs.trading-svc }}
+      ranking-svc: ${{ steps.filter.outputs.ranking-svc }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'pkg/**'
+              - 'infra/**'
+              - 'proto/**'
+            gateway:
+              - 'services/gateway/**'
+            auth-svc:
+              - 'services/auth-svc/**'
+            market-svc:
+              - 'services/market-svc/**'
+            trading-svc:
+              - 'services/trading-svc/**'
+            ranking-svc:
+              - 'services/ranking-svc/**'
+            frontend:
+              - 'frontend/**'
+
+  deploy-gateway:
+    name: Deploy Gateway
+    needs: [changes]
+    if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: echo "TODO - Deploy gateway to Railway"
+
+  deploy-auth-svc:
+    name: Deploy Auth Service
+    needs: [changes]
+    if: needs.changes.outputs.auth-svc == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: echo "TODO - Deploy auth-svc to Railway"
+
+  deploy-market-svc:
+    name: Deploy Market Service
+    needs: [changes]
+    if: needs.changes.outputs.market-svc == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: echo "TODO - Deploy market-svc to Railway"
+
+  deploy-trading-svc:
+    name: Deploy Trading Service
+    needs: [changes]
+    if: needs.changes.outputs.trading-svc == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: echo "TODO - Deploy trading-svc to Railway"
+
+  deploy-ranking-svc:
+    name: Deploy Ranking Service
+    needs: [changes]
+    if: needs.changes.outputs.ranking-svc == 'true' || needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: echo "TODO - Deploy ranking-svc to Railway"
+
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: [changes]
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Vercel
+        run: echo "TODO - Deploy frontend to Vercel"

@@ -1,0 +1,536 @@
+schemas:
+  # ---------------------------------------------------------------------------
+  # Core domain models
+  # ---------------------------------------------------------------------------
+
+  User:
+    type: object
+    required:
+      - id
+      - wallet_address
+      - user_type
+      - created_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique user identifier.
+        examples:
+          - "a3bb189e-8bf9-3888-9912-ace4e6543002"
+      wallet_address:
+        type: string
+        description: Ethereum-compatible wallet address.
+        examples:
+          - "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+      display_name:
+        type: string
+        nullable: true
+        description: Optional human-readable display name.
+        examples:
+          - "alice.eth"
+      avatar_url:
+        type: string
+        format: uri
+        nullable: true
+        description: URL to the user's avatar image.
+      user_type:
+        type: string
+        enum:
+          - human
+          - agent
+        description: Whether this account is operated by a human or an AI agent.
+        examples:
+          - "human"
+      is_admin:
+        type: boolean
+        description: Whether the user has admin privileges.
+        examples:
+          - false
+      created_at:
+        type: string
+        format: date-time
+        description: Timestamp when the user account was created.
+        examples:
+          - "2025-11-01T12:00:00Z"
+
+  Market:
+    type: object
+    required:
+      - id
+      - title
+      - description
+      - category
+      - market_type
+      - status
+      - created_at
+      - closes_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique market identifier.
+        examples:
+          - "d290f1ee-6c54-4b01-90e6-d701748f0851"
+      title:
+        type: string
+        description: Short, human-readable question the market is predicting.
+        examples:
+          - "Will ETH exceed $5,000 by 2025-12-31?"
+      description:
+        type: string
+        description: Detailed description with resolution criteria.
+        examples:
+          - "This market resolves YES if the price of ETH on CoinGecko exceeds $5,000 USD at any point before December 31, 2025 23:59 UTC."
+      category:
+        type: string
+        description: Market category for filtering and discovery.
+        examples:
+          - "crypto"
+      market_type:
+        type: string
+        enum:
+          - binary
+          - multi
+        description: >
+          binary -- exactly two outcomes (Yes/No).
+          multi  -- three or more mutually exclusive outcomes.
+        examples:
+          - "binary"
+      status:
+        type: string
+        enum:
+          - draft
+          - open
+          - closed
+          - resolved
+          - cancelled
+        description: Current lifecycle status of the market.
+        examples:
+          - "open"
+      winning_outcome_id:
+        type: string
+        format: uuid
+        nullable: true
+        description: Set after resolution to the ID of the winning outcome.
+      volume:
+        type: string
+        description: Total trading volume in the market (decimal string).
+        examples:
+          - "125000.00"
+      liquidity:
+        type: string
+        description: Current liquidity available in the market (decimal string).
+        examples:
+          - "50000.00"
+      created_at:
+        type: string
+        format: date-time
+        description: When the market was created.
+        examples:
+          - "2025-10-15T08:30:00Z"
+      closes_at:
+        type: string
+        format: date-time
+        description: Deadline after which no new orders are accepted.
+        examples:
+          - "2025-12-31T23:59:59Z"
+      resolved_at:
+        type: string
+        format: date-time
+        nullable: true
+        description: Timestamp when the market was resolved, if applicable.
+
+  Outcome:
+    type: object
+    required:
+      - id
+      - market_id
+      - label
+      - price
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique outcome identifier.
+        examples:
+          - "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+      market_id:
+        type: string
+        format: uuid
+        description: Parent market this outcome belongs to.
+      label:
+        type: string
+        description: Human-readable outcome label.
+        examples:
+          - "Yes"
+      price:
+        type: string
+        description: >
+          Current implied probability expressed as a decimal price between
+          "0.01" and "0.99".
+        examples:
+          - "0.65"
+
+  Order:
+    type: object
+    required:
+      - id
+      - market_id
+      - outcome_id
+      - user_id
+      - side
+      - price
+      - quantity
+      - filled_quantity
+      - status
+      - created_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique order identifier.
+        examples:
+          - "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      market_id:
+        type: string
+        format: uuid
+        description: Market this order was placed in.
+      outcome_id:
+        type: string
+        format: uuid
+        description: Outcome the order is for.
+      user_id:
+        type: string
+        format: uuid
+        description: User who placed the order.
+      side:
+        type: string
+        enum:
+          - buy
+          - sell
+        description: Whether this is a buy or sell order.
+        examples:
+          - "buy"
+      price:
+        type: string
+        description: Limit price, a decimal string between "0.01" and "0.99".
+        examples:
+          - "0.65"
+      quantity:
+        type: string
+        description: Total number of shares requested (decimal string).
+        examples:
+          - "100.00"
+      filled_quantity:
+        type: string
+        description: Number of shares filled so far (decimal string).
+        examples:
+          - "50.00"
+      status:
+        type: string
+        enum:
+          - open
+          - partially_filled
+          - filled
+          - cancelled
+        description: Current order status.
+        examples:
+          - "open"
+      created_at:
+        type: string
+        format: date-time
+        description: When the order was created.
+        examples:
+          - "2025-11-10T14:32:00Z"
+      updated_at:
+        type: string
+        format: date-time
+        description: Last time the order was updated.
+        examples:
+          - "2025-11-10T14:35:00Z"
+
+  Trade:
+    type: object
+    required:
+      - id
+      - market_id
+      - outcome_id
+      - buyer_order_id
+      - seller_order_id
+      - price
+      - quantity
+      - executed_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique trade identifier.
+      market_id:
+        type: string
+        format: uuid
+        description: Market the trade occurred in.
+      outcome_id:
+        type: string
+        format: uuid
+        description: Outcome that was traded.
+      buyer_order_id:
+        type: string
+        format: uuid
+        description: The buy-side order that was matched.
+      seller_order_id:
+        type: string
+        format: uuid
+        description: The sell-side order that was matched.
+      price:
+        type: string
+        description: Execution price (decimal string).
+        examples:
+          - "0.65"
+      quantity:
+        type: string
+        description: Number of shares exchanged (decimal string).
+        examples:
+          - "25.00"
+      executed_at:
+        type: string
+        format: date-time
+        description: Timestamp when the trade was executed.
+        examples:
+          - "2025-11-10T14:35:00Z"
+
+  Position:
+    type: object
+    required:
+      - id
+      - user_id
+      - market_id
+      - outcome_id
+      - quantity
+      - avg_price
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique position identifier.
+      user_id:
+        type: string
+        format: uuid
+        description: Owner of the position.
+      market_id:
+        type: string
+        format: uuid
+        description: Market the position is in.
+      outcome_id:
+        type: string
+        format: uuid
+        description: Outcome the position is for.
+      quantity:
+        type: string
+        description: Number of shares held (decimal string). Negative if short.
+        examples:
+          - "100.00"
+      avg_price:
+        type: string
+        description: Volume-weighted average entry price (decimal string).
+        examples:
+          - "0.62"
+      current_value:
+        type: string
+        description: Current market value of the position (decimal string).
+        examples:
+          - "65.00"
+
+  MintTransaction:
+    type: object
+    required:
+      - id
+      - user_id
+      - market_id
+      - quantity
+      - cost
+      - created_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique mint transaction identifier.
+      user_id:
+        type: string
+        format: uuid
+        description: User who minted the outcome tokens.
+      market_id:
+        type: string
+        format: uuid
+        description: Market the tokens were minted for.
+      quantity:
+        type: string
+        description: Number of complete outcome sets minted (decimal string).
+        examples:
+          - "100.00"
+      cost:
+        type: string
+        description: Total cost of the minting operation (decimal string).
+        examples:
+          - "100.00"
+      created_at:
+        type: string
+        format: date-time
+        description: Timestamp when the mint occurred.
+        examples:
+          - "2025-11-10T14:30:00Z"
+
+  UserRanking:
+    type: object
+    required:
+      - user_id
+      - dimension
+      - rank
+      - value
+    properties:
+      user_id:
+        type: string
+        format: uuid
+        description: User being ranked.
+      user:
+        $ref: "#/schemas/User"
+      dimension:
+        type: string
+        enum:
+          - total_assets
+          - pnl
+          - volume
+          - win_rate
+          - trade_count
+        description: The metric this ranking is based on.
+        examples:
+          - "pnl"
+      rank:
+        type: integer
+        minimum: 1
+        description: Numeric rank (1 = best).
+        examples:
+          - 1
+      value:
+        type: string
+        description: >
+          The value for the given dimension (decimal string).
+          For win_rate this is a ratio between "0.00" and "1.00".
+        examples:
+          - "42350.75"
+
+  PriceLevel:
+    type: object
+    required:
+      - price
+      - quantity
+    properties:
+      price:
+        type: string
+        description: Price level (decimal string, "0.01" to "0.99").
+        examples:
+          - "0.65"
+      quantity:
+        type: string
+        description: Total quantity available at this price (decimal string).
+        examples:
+          - "500.00"
+
+  ApiKey:
+    type: object
+    required:
+      - id
+      - prefix
+      - created_at
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: Unique API key identifier used for revocation.
+        examples:
+          - "c56a4180-65aa-42ec-a945-5fd21dec0538"
+      prefix:
+        type: string
+        description: First 8 characters of the key for identification.
+        examples:
+          - "tm_k8x2f"
+      label:
+        type: string
+        nullable: true
+        description: Optional user-provided label for the key.
+        examples:
+          - "trading-bot-prod"
+      created_at:
+        type: string
+        format: date-time
+        description: When the key was created.
+        examples:
+          - "2025-11-01T12:00:00Z"
+      last_used_at:
+        type: string
+        format: date-time
+        nullable: true
+        description: Last time the key was used to authenticate.
+
+  # ---------------------------------------------------------------------------
+  # Envelope schemas
+  # ---------------------------------------------------------------------------
+
+  ApiResponse:
+    type: object
+    required:
+      - ok
+    properties:
+      ok:
+        type: boolean
+        description: Indicates whether the request succeeded.
+      data:
+        type: object
+        description: Response payload. Present when ok is true.
+      error:
+        $ref: "#/schemas/ErrorDetail"
+      meta:
+        $ref: "#/schemas/Pagination"
+
+  ErrorDetail:
+    type: object
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: string
+        description: Machine-readable error code.
+        examples:
+          - "MARKET_NOT_FOUND"
+      message:
+        type: string
+        description: Human-readable error description.
+        examples:
+          - "The requested market does not exist."
+
+  Pagination:
+    type: object
+    required:
+      - page
+      - per_page
+      - total
+    properties:
+      page:
+        type: integer
+        minimum: 1
+        description: Current page number (1-indexed).
+        examples:
+          - 1
+      per_page:
+        type: integer
+        minimum: 1
+        maximum: 100
+        description: Number of items per page.
+        examples:
+          - 20
+      total:
+        type: integer
+        minimum: 0
+        description: Total number of items matching the query.
+        examples:
+          - 142

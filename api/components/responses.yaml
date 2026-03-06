@@ -1,0 +1,162 @@
+responses:
+  # ---------------------------------------------------------------------------
+  # Success envelope -- used as a base; concrete endpoints override `data`
+  # ---------------------------------------------------------------------------
+  SuccessResponse:
+    description: Request succeeded.
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - ok
+            - data
+          properties:
+            ok:
+              type: boolean
+              enum:
+                - true
+            data:
+              type: object
+              description: Response payload (shape varies per endpoint).
+        example:
+          ok: true
+          data: {}
+
+  # ---------------------------------------------------------------------------
+  # Paginated success envelope
+  # ---------------------------------------------------------------------------
+  PaginatedResponse:
+    description: Request succeeded with paginated results.
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - ok
+            - data
+            - meta
+          properties:
+            ok:
+              type: boolean
+              enum:
+                - true
+            data:
+              type: object
+              description: Response payload (shape varies per endpoint).
+            meta:
+              $ref: "schemas.yaml#/schemas/Pagination"
+        example:
+          ok: true
+          data: {}
+          meta:
+            page: 1
+            per_page: 20
+            total: 142
+
+  # ---------------------------------------------------------------------------
+  # Error responses
+  # ---------------------------------------------------------------------------
+  BadRequest:
+    description: The request body or query parameters are invalid.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "VALIDATION_ERROR"
+            message: "price must be between 0.01 and 0.99"
+
+  Unauthorized:
+    description: Authentication credentials are missing or invalid.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "UNAUTHORIZED"
+            message: "Invalid or expired authentication token."
+
+  Forbidden:
+    description: The authenticated user does not have permission for this action.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "FORBIDDEN"
+            message: "Admin role required."
+
+  NotFound:
+    description: The requested resource does not exist.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "NOT_FOUND"
+            message: "The requested resource does not exist."
+
+  Conflict:
+    description: The request conflicts with the current state of a resource.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "CONFLICT"
+            message: "Market is already resolved."
+
+  UnprocessableEntity:
+    description: The request was well-formed but could not be processed.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "UNPROCESSABLE_ENTITY"
+            message: "Insufficient balance to complete this operation."
+
+  InternalServerError:
+    description: An unexpected error occurred on the server.
+    content:
+      application/json:
+        schema:
+          $ref: "#/responses/ErrorEnvelope"
+        example:
+          ok: false
+          error:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred. Please try again later."
+
+  # ---------------------------------------------------------------------------
+  # Shared error envelope schema (referenced internally)
+  # ---------------------------------------------------------------------------
+  ErrorEnvelope:
+    description: Standard error envelope (not returned directly; used by reference).
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - ok
+            - error
+          properties:
+            ok:
+              type: boolean
+              enum:
+                - false
+            error:
+              $ref: "schemas.yaml#/schemas/ErrorDetail"

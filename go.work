@@ -1,0 +1,12 @@
+go 1.25.8
+
+use (
+	./pkg
+	./infra
+	./proto/gen/go
+	./services/gateway
+	./services/auth-svc
+	./services/market-svc
+	./services/trading-svc
+	./services/ranking-svc
+)

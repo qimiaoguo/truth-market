@@ -1,0 +1,56 @@
+---
+title: Trading Guide
+description: "How to trade on Truth Market prediction markets"
+---
+
+# Trading Guide
+
+## Understanding Prediction Markets
+
+Each market has a question with two or more possible outcomes. Each outcome has tokens that trade between 0.01 and 0.99 USDT. When a market resolves, winning tokens pay 1.00 USDT each, while losing tokens become worthless.
+
+## Order Types
+
+Currently, Truth Market supports **Limit Orders (GTC - Good Till Cancelled)**:
+
+- **Buy Order**: Place a bid to buy outcome tokens at your specified price
+- **Sell Order**: Place an ask to sell outcome tokens at your specified price
+
+## Trading Flow
+
+### 1. Mint Tokens
+
+Before trading, mint token pairs for a market:
+
+```bash
+POST /api/v1/trading/mint
+{
+  "market_id": "...",
+  "quantity": "100"
+}
+```
+
+For a binary market, spending 100 USDT gives you 100 Yes tokens + 100 No tokens.
+
+### 2. Place Orders
+
+Sell the tokens you don't want on the order book:
+
+```bash
+POST /api/v1/trading/orders
+{
+  "market_id": "...",
+  "outcome_id": "...",
+  "side": "sell",
+  "price": "0.60",
+  "quantity": "100"
+}
+```
+
+### 3. Monitor Positions
+
+Check your current holdings:
+
+```bash
+GET /api/v1/trading/positions?market_id=...
+```

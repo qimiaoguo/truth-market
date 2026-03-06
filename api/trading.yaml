@@ -1,0 +1,389 @@
+paths:
+  # ---------------------------------------------------------------------------
+  # POST /trading/mint
+  # ---------------------------------------------------------------------------
+  /trading/mint:
+    post:
+      operationId: mintOutcomeTokens
+      tags:
+        - Trading
+      summary: Mint a complete set of outcome tokens
+      description: >
+        Mints one complete set of outcome tokens for a market.  For a binary
+        market this produces one Yes token and one No token per unit of
+        quantity.  The cost equals the quantity (each complete set is worth 1
+        unit of collateral).  The resulting positions can then be sold on the
+        order book.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - market_id
+                - quantity
+              properties:
+                market_id:
+                  type: string
+                  format: uuid
+                  description: Market to mint tokens for.
+                quantity:
+                  type: string
+                  description: Number of complete outcome sets to mint (decimal string).
+                  examples:
+                    - "100.00"
+            example:
+              market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+              quantity: "100.00"
+      responses:
+        "201":
+          description: Tokens minted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - positions
+                    properties:
+                      positions:
+                        type: array
+                        description: >
+                          Positions created or updated for each outcome in the
+                          market.
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/Position"
+              example:
+                ok: true
+                data:
+                  positions:
+                    - id: "e1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                      user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                      quantity: "100.00"
+                      avg_price: "0.50"
+                      current_value: "65.00"
+                    - id: "f2b3c4d5-e6f7-8901-bcde-f12345678901"
+                      user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      outcome_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                      quantity: "100.00"
+                      avg_price: "0.50"
+                      current_value: "35.00"
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+        "422":
+          $ref: "components/responses.yaml#/responses/UnprocessableEntity"
+
+  # ---------------------------------------------------------------------------
+  # POST /trading/orders
+  # ---------------------------------------------------------------------------
+  /trading/orders:
+    post:
+      operationId: createOrder
+      tags:
+        - Trading
+      summary: Place a limit order
+      description: >
+        Places a new limit order on the order book for a specific outcome.
+        The order will attempt to match against existing resting orders at the
+        specified price or better.  Any unmatched quantity remains as a resting
+        order until filled or cancelled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - market_id
+                - outcome_id
+                - side
+                - price
+                - quantity
+              properties:
+                market_id:
+                  type: string
+                  format: uuid
+                  description: Market to place the order in.
+                outcome_id:
+                  type: string
+                  format: uuid
+                  description: Outcome to trade.
+                side:
+                  type: string
+                  enum:
+                    - buy
+                    - sell
+                  description: Whether to buy or sell outcome tokens.
+                price:
+                  type: string
+                  description: >
+                    Limit price as a decimal string.  Must be between "0.01"
+                    and "0.99" inclusive.  Represents the implied probability.
+                  examples:
+                    - "0.65"
+                quantity:
+                  type: string
+                  description: Number of shares to trade (decimal string).
+                  examples:
+                    - "50.00"
+            example:
+              market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+              outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+              side: "buy"
+              price: "0.65"
+              quantity: "50.00"
+      responses:
+        "201":
+          description: Order placed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - order
+                    properties:
+                      order:
+                        $ref: "components/schemas.yaml#/schemas/Order"
+              example:
+                ok: true
+                data:
+                  order:
+                    id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                    user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                    side: "buy"
+                    price: "0.65"
+                    quantity: "50.00"
+                    filled_quantity: "0.00"
+                    status: "open"
+                    created_at: "2025-11-10T14:32:00Z"
+                    updated_at: "2025-11-10T14:32:00Z"
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+        "422":
+          $ref: "components/responses.yaml#/responses/UnprocessableEntity"
+
+    # -------------------------------------------------------------------------
+    # GET /trading/orders
+    # -------------------------------------------------------------------------
+    get:
+      operationId: listOrders
+      tags:
+        - Trading
+      summary: List the authenticated user's orders
+      description: >
+        Returns a paginated list of orders placed by the authenticated user.
+        Supports filtering by status and market.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by order status.
+          schema:
+            type: string
+            enum:
+              - open
+              - partially_filled
+              - filled
+              - cancelled
+          examples:
+            open:
+              value: "open"
+              summary: Only open orders
+        - $ref: "components/parameters.yaml#/parameters/MarketIdQueryParam"
+        - $ref: "components/parameters.yaml#/parameters/PageParam"
+        - $ref: "components/parameters.yaml#/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated list of orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                  - meta
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - orders
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/Order"
+                  meta:
+                    $ref: "components/schemas.yaml#/schemas/Pagination"
+              example:
+                ok: true
+                data:
+                  orders:
+                    - id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                      user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                      side: "buy"
+                      price: "0.65"
+                      quantity: "50.00"
+                      filled_quantity: "25.00"
+                      status: "partially_filled"
+                      created_at: "2025-11-10T14:32:00Z"
+                      updated_at: "2025-11-10T14:35:00Z"
+                meta:
+                  page: 1
+                  per_page: 20
+                  total: 5
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+
+  # ---------------------------------------------------------------------------
+  # DELETE /trading/orders/{id}
+  # ---------------------------------------------------------------------------
+  /trading/orders/{id}:
+    delete:
+      operationId: cancelOrder
+      tags:
+        - Trading
+      summary: Cancel an open order
+      description: >
+        Cancels an open or partially filled order.  Any unfilled quantity is
+        returned to the user's available balance.  Fully filled orders cannot
+        be cancelled.
+      parameters:
+        - $ref: "components/parameters.yaml#/parameters/OrderIdPathParam"
+      responses:
+        "200":
+          description: Order cancelled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - order
+                    properties:
+                      order:
+                        $ref: "components/schemas.yaml#/schemas/Order"
+              example:
+                ok: true
+                data:
+                  order:
+                    id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                    market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                    user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                    side: "buy"
+                    price: "0.65"
+                    quantity: "50.00"
+                    filled_quantity: "25.00"
+                    status: "cancelled"
+                    created_at: "2025-11-10T14:32:00Z"
+                    updated_at: "2025-11-10T15:00:00Z"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+        "404":
+          $ref: "components/responses.yaml#/responses/NotFound"
+        "409":
+          $ref: "components/responses.yaml#/responses/Conflict"
+
+  # ---------------------------------------------------------------------------
+  # GET /trading/positions
+  # ---------------------------------------------------------------------------
+  /trading/positions:
+    get:
+      operationId: listPositions
+      tags:
+        - Trading
+      summary: List the authenticated user's positions
+      description: >
+        Returns all open positions held by the authenticated user.  Optionally
+        filter to a single market.
+      parameters:
+        - $ref: "components/parameters.yaml#/parameters/MarketIdQueryParam"
+      responses:
+        "200":
+          description: List of positions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - positions
+                    properties:
+                      positions:
+                        type: array
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/Position"
+              example:
+                ok: true
+                data:
+                  positions:
+                    - id: "e1a2b3c4-d5e6-7890-abcd-ef1234567890"
+                      user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      outcome_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                      quantity: "100.00"
+                      avg_price: "0.62"
+                      current_value: "65.00"
+                    - id: "f2b3c4d5-e6f7-8901-bcde-f12345678901"
+                      user_id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      outcome_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                      quantity: "50.00"
+                      avg_price: "0.35"
+                      current_value: "17.50"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"

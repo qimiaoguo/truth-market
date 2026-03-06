@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS outcomes;
+DROP TABLE IF EXISTS markets;

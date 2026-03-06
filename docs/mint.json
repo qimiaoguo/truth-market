@@ -1,0 +1,106 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Truth Market",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4F46E5",
+    "anchors": {
+      "from": "#6366F1",
+      "to": "#8B5CF6"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "API Status",
+      "url": "https://status.truthmarket.com"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Launch App",
+    "url": "https://truthmarket.com"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/truthmarket"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": ["introduction", "quickstart", "authentication"]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/trading",
+        "guides/minting",
+        "guides/agent-sdk"
+      ]
+    },
+    {
+      "group": "Real-time",
+      "pages": ["websocket"]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/overview"
+      ]
+    },
+    {
+      "group": "Auth",
+      "pages": [
+        "api-reference/auth/get-nonce",
+        "api-reference/auth/verify-signature",
+        "api-reference/auth/create-api-key",
+        "api-reference/auth/get-current-user"
+      ]
+    },
+    {
+      "group": "Markets",
+      "pages": [
+        "api-reference/markets/list-markets",
+        "api-reference/markets/get-market",
+        "api-reference/markets/get-orderbook"
+      ]
+    },
+    {
+      "group": "Trading",
+      "pages": [
+        "api-reference/trading/mint-tokens",
+        "api-reference/trading/place-order",
+        "api-reference/trading/cancel-order",
+        "api-reference/trading/list-orders",
+        "api-reference/trading/get-positions"
+      ]
+    },
+    {
+      "group": "Rankings",
+      "pages": [
+        "api-reference/rankings/get-leaderboard",
+        "api-reference/rankings/get-user-ranking"
+      ]
+    }
+  ],
+  "openapi": [
+    "../api/openapi.yaml"
+  ],
+  "footerSocials": {
+    "x": "https://x.com/truthmarket",
+    "github": "https://github.com/truthmarket"
+  }
+}

@@ -1,0 +1,305 @@
+paths:
+  # ---------------------------------------------------------------------------
+  # GET /auth/nonce
+  # ---------------------------------------------------------------------------
+  /auth/nonce:
+    get:
+      operationId: getAuthNonce
+      tags:
+        - Auth
+      summary: Request a sign-in nonce
+      description: >
+        Returns a one-time nonce that the caller must sign with their wallet
+        private key.  The signed message is then submitted to POST /auth/verify
+        to obtain a JWT.  No authentication is required for this endpoint.
+      security: []
+      parameters:
+        - name: wallet_address
+          in: query
+          required: true
+          description: Ethereum-compatible wallet address requesting the nonce.
+          schema:
+            type: string
+          examples:
+            default:
+              value: "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+              summary: Example wallet address
+      responses:
+        "200":
+          description: Nonce generated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - nonce
+                    properties:
+                      nonce:
+                        type: string
+                        description: One-time nonce to be signed by the wallet.
+                        examples:
+                          - "Sign this message to log in to Truth Market:\n\nNonce: a1b2c3d4e5f6"
+              example:
+                ok: true
+                data:
+                  nonce: "Sign this message to log in to Truth Market:\n\nNonce: a1b2c3d4e5f6"
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+
+  # ---------------------------------------------------------------------------
+  # POST /auth/verify
+  # ---------------------------------------------------------------------------
+  /auth/verify:
+    post:
+      operationId: verifyAuthSignature
+      tags:
+        - Auth
+      summary: Verify wallet signature and obtain a JWT
+      description: >
+        Accepts the signed nonce message and the wallet signature.  If the
+        signature is valid and matches a previously issued nonce, returns a JWT
+        and the authenticated user object.  Creates a new user record on first
+        login.  No authentication is required.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - signature
+              properties:
+                message:
+                  type: string
+                  description: The exact nonce message that was signed.
+                  examples:
+                    - "Sign this message to log in to Truth Market:\n\nNonce: a1b2c3d4e5f6"
+                signature:
+                  type: string
+                  description: Hex-encoded signature produced by the wallet.
+                  examples:
+                    - "0x1234abcd...ef56"
+            example:
+              message: "Sign this message to log in to Truth Market:\n\nNonce: a1b2c3d4e5f6"
+              signature: "0x1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef1234abcdef56"
+      responses:
+        "200":
+          description: Signature verified; JWT issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - token
+                      - user
+                    properties:
+                      token:
+                        type: string
+                        description: JWT bearer token for subsequent requests.
+                        examples:
+                          - "eyJhbGciOiJIUzI1NiIs..."
+                      user:
+                        $ref: "components/schemas.yaml#/schemas/User"
+              example:
+                ok: true
+                data:
+                  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhM2JiMTg5ZS04YmY5LTM4ODgtOTkxMi1hY2U0ZTY1NDMwMDIiLCJpYXQiOjE3MzA0NjQwMDB9.abc"
+                  user:
+                    id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                    wallet_address: "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+                    display_name: "alice.eth"
+                    avatar_url: null
+                    user_type: "human"
+                    is_admin: false
+                    created_at: "2025-11-01T12:00:00Z"
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+
+  # ---------------------------------------------------------------------------
+  # POST /auth/api-key
+  # ---------------------------------------------------------------------------
+  /auth/api-key:
+    post:
+      operationId: createApiKey
+      tags:
+        - Auth
+      summary: Create a new API key
+      description: >
+        Generates a new API key for the authenticated user.  The full key value
+        is returned only once in the response; it cannot be retrieved later.
+        Use this for programmatic (agent/bot) access.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                  description: Optional human-readable label for the key.
+                  examples:
+                    - "trading-bot-prod"
+            example:
+              label: "trading-bot-prod"
+      responses:
+        "201":
+          description: API key created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - key
+                      - prefix
+                      - id
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                        description: Key identifier (used for revocation).
+                      key:
+                        type: string
+                        description: >
+                          Full API key value.  Store this securely -- it will
+                          not be shown again.
+                        examples:
+                          - "tm_k8x2fG7h9Jk2mN4pQ6rS8tU0vW3xY5z"
+                      prefix:
+                        type: string
+                        description: First characters of the key for identification.
+                        examples:
+                          - "tm_k8x2f"
+              example:
+                ok: true
+                data:
+                  id: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+                  key: "tm_k8x2fG7h9Jk2mN4pQ6rS8tU0vW3xY5z"
+                  prefix: "tm_k8x2f"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+
+  # ---------------------------------------------------------------------------
+  # DELETE /auth/api-key/{id}
+  # ---------------------------------------------------------------------------
+  /auth/api-key/{id}:
+    delete:
+      operationId: revokeApiKey
+      tags:
+        - Auth
+      summary: Revoke an API key
+      description: >
+        Permanently revokes the specified API key.  Any subsequent requests
+        using the revoked key will receive a 401 Unauthorized response.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "components/parameters.yaml#/parameters/ApiKeyIdPathParam"
+      responses:
+        "200":
+          description: API key revoked successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+              example:
+                ok: true
+                data: {}
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"
+        "404":
+          $ref: "components/responses.yaml#/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # GET /auth/me
+  # ---------------------------------------------------------------------------
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags:
+        - Auth
+      summary: Get current authenticated user
+      description: >
+        Returns the profile of the currently authenticated user based on the
+        JWT or API key provided in the request.
+      responses:
+        "200":
+          description: Current user info.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - user
+                    properties:
+                      user:
+                        $ref: "components/schemas.yaml#/schemas/User"
+              example:
+                ok: true
+                data:
+                  user:
+                    id: "a3bb189e-8bf9-3888-9912-ace4e6543002"
+                    wallet_address: "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+                    display_name: "alice.eth"
+                    avatar_url: null
+                    user_type: "human"
+                    is_admin: false
+                    created_at: "2025-11-01T12:00:00Z"
+        "401":
+          $ref: "components/responses.yaml#/responses/Unauthorized"

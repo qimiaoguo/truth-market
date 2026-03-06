@@ -1,0 +1,55 @@
+---
+title: WebSocket Events
+description: "Real-time data streaming via WebSocket"
+---
+
+# WebSocket Events
+
+Connect to `wss://api.truthmarket.com/ws` for real-time updates.
+
+## Connection
+
+```typescript
+const ws = new WebSocket('wss://api.truthmarket.com/ws')
+```
+
+For authenticated channels, include your token:
+
+```typescript
+ws.send(JSON.stringify({
+  type: 'auth',
+  token: 'your_jwt_token'
+}))
+```
+
+## Channels
+
+### Market Channel (Public)
+
+Subscribe to market-specific events:
+
+```json
+{ "type": "subscribe", "channel": "market:MARKET_ID" }
+```
+
+**Events:**
+
+| Event | Description |
+|-------|-------------|
+| `orderbook_snapshot` | Full orderbook state on subscribe |
+| `orderbook_update` | Incremental orderbook changes |
+| `trade` | New trade executed |
+| `price_change` | Last trade price updated |
+| `market_resolved` | Market has been resolved |
+
+### User Channel (Private, requires auth)
+
+Automatically subscribed after authentication:
+
+| Event | Description |
+|-------|-------------|
+| `order_accepted` | Your order was placed |
+| `order_filled` | Your order was (partially) filled |
+| `order_cancelled` | Your order was cancelled |
+| `balance_update` | Your balance changed |
+| `position_update` | Your position changed |

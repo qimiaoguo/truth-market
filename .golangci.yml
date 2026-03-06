@@ -1,0 +1,63 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gocritic
+    - gofmt
+    - goimports
+    - misspell
+    - noctx
+    - bodyclose
+    - gosec
+    - prealloc
+    - unconvert
+    - unparam
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+  gosec:
+    excludes:
+      - G104  # Unhandled errors (covered by errcheck)
+  goimports:
+    local-prefixes: github.com/truthmarket/truth-market
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - bodyclose
+    - path: internal/config/
+      linters:
+        - gosec
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    - format: colored-line-number
+  sort-results: true
+  sort-order:
+    - linter
+    - severity
+    - file

@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.venv/
+vendor/
+
+# Build output
+.next/
+out/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test / Coverage
+coverage/
+*.cover
+*.out
+htmlcov/
+.pytest_cache/
+
+# Docker
+*.log
+
+# Temporary
+tmp/
+temp/

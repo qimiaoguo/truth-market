@@ -1,0 +1,251 @@
+paths:
+  # ---------------------------------------------------------------------------
+  # GET /markets
+  # ---------------------------------------------------------------------------
+  /markets:
+    get:
+      operationId: listMarkets
+      tags:
+        - Markets
+      summary: List prediction markets
+      description: >
+        Returns a paginated list of prediction markets.  Supports filtering by
+        status and category.  Results are ordered by creation date descending
+        (newest first).  This endpoint is publicly accessible; no authentication
+        is required.
+      security: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: >
+            Filter markets by lifecycle status.  Omit to return markets in
+            all statuses.
+          schema:
+            type: string
+            enum:
+              - draft
+              - open
+              - closed
+              - resolved
+              - cancelled
+          examples:
+            open:
+              value: "open"
+              summary: Only open markets
+        - name: category
+          in: query
+          required: false
+          description: Filter markets by category slug.
+          schema:
+            type: string
+          examples:
+            crypto:
+              value: "crypto"
+              summary: Cryptocurrency markets
+        - $ref: "components/parameters.yaml#/parameters/PageParam"
+        - $ref: "components/parameters.yaml#/parameters/PerPageParam"
+      responses:
+        "200":
+          description: Paginated list of markets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                  - meta
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - markets
+                    properties:
+                      markets:
+                        type: array
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/Market"
+                  meta:
+                    $ref: "components/schemas.yaml#/schemas/Pagination"
+              example:
+                ok: true
+                data:
+                  markets:
+                    - id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      title: "Will ETH exceed $5,000 by 2025-12-31?"
+                      description: "This market resolves YES if the price of ETH on CoinGecko exceeds $5,000 USD at any point before December 31, 2025 23:59 UTC."
+                      category: "crypto"
+                      market_type: "binary"
+                      status: "open"
+                      winning_outcome_id: null
+                      volume: "125000.00"
+                      liquidity: "50000.00"
+                      created_at: "2025-10-15T08:30:00Z"
+                      closes_at: "2025-12-31T23:59:59Z"
+                      resolved_at: null
+                meta:
+                  page: 1
+                  per_page: 20
+                  total: 42
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+
+  # ---------------------------------------------------------------------------
+  # GET /markets/{id}
+  # ---------------------------------------------------------------------------
+  /markets/{id}:
+    get:
+      operationId: getMarket
+      tags:
+        - Markets
+      summary: Get a single market with its outcomes
+      description: >
+        Returns detailed information about a specific prediction market,
+        including the full list of possible outcomes and their current prices.
+        This endpoint is publicly accessible.
+      security: []
+      parameters:
+        - $ref: "components/parameters.yaml#/parameters/MarketIdPathParam"
+      responses:
+        "200":
+          description: Market details with outcomes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - market
+                      - outcomes
+                    properties:
+                      market:
+                        $ref: "components/schemas.yaml#/schemas/Market"
+                      outcomes:
+                        type: array
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/Outcome"
+              example:
+                ok: true
+                data:
+                  market:
+                    id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                    title: "Will ETH exceed $5,000 by 2025-12-31?"
+                    description: "This market resolves YES if the price of ETH on CoinGecko exceeds $5,000 USD at any point before December 31, 2025 23:59 UTC."
+                    category: "crypto"
+                    market_type: "binary"
+                    status: "open"
+                    winning_outcome_id: null
+                    volume: "125000.00"
+                    liquidity: "50000.00"
+                    created_at: "2025-10-15T08:30:00Z"
+                    closes_at: "2025-12-31T23:59:59Z"
+                    resolved_at: null
+                  outcomes:
+                    - id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      label: "Yes"
+                      price: "0.65"
+                    - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                      market_id: "d290f1ee-6c54-4b01-90e6-d701748f0851"
+                      label: "No"
+                      price: "0.35"
+        "404":
+          $ref: "components/responses.yaml#/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # GET /markets/{id}/orderbook
+  # ---------------------------------------------------------------------------
+  /markets/{id}/orderbook:
+    get:
+      operationId: getMarketOrderbook
+      tags:
+        - Markets
+      summary: Get the order book for a market outcome
+      description: >
+        Returns aggregated bid and ask price levels for a specific outcome
+        within a market.  Bids are sorted descending by price; asks are sorted
+        ascending.  This endpoint is publicly accessible.
+      security: []
+      parameters:
+        - $ref: "components/parameters.yaml#/parameters/MarketIdPathParam"
+        - name: outcome_id
+          in: query
+          required: true
+          description: The outcome to retrieve the order book for.
+          schema:
+            type: string
+            format: uuid
+          examples:
+            default:
+              value: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+              summary: Example outcome ID
+      responses:
+        "200":
+          description: Order book price levels.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - data
+                properties:
+                  ok:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - bids
+                      - asks
+                    properties:
+                      bids:
+                        type: array
+                        description: >
+                          Buy orders aggregated by price, sorted from highest
+                          to lowest price.
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/PriceLevel"
+                      asks:
+                        type: array
+                        description: >
+                          Sell orders aggregated by price, sorted from lowest
+                          to highest price.
+                        items:
+                          $ref: "components/schemas.yaml#/schemas/PriceLevel"
+              example:
+                ok: true
+                data:
+                  bids:
+                    - price: "0.64"
+                      quantity: "250.00"
+                    - price: "0.63"
+                      quantity: "500.00"
+                    - price: "0.60"
+                      quantity: "1000.00"
+                  asks:
+                    - price: "0.66"
+                      quantity: "300.00"
+                    - price: "0.68"
+                      quantity: "150.00"
+                    - price: "0.70"
+                      quantity: "800.00"
+        "400":
+          $ref: "components/responses.yaml#/responses/BadRequest"
+        "404":
+          $ref: "components/responses.yaml#/responses/NotFound"

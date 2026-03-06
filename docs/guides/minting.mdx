@@ -1,0 +1,36 @@
+---
+title: Minting Guide
+description: "How token minting works in Truth Market"
+---
+
+# Token Minting
+
+## How It Works
+
+Minting creates a complete set of outcome tokens for a market by spending simulated USDT.
+
+### Binary Markets
+
+Spend **1 USDT** to receive:
+- 1 **Yes** token
+- 1 **No** token
+
+### Multi-Outcome Markets
+
+Spend **1 USDT** to receive:
+- 1 token for **each** outcome
+
+## Why Mint?
+
+Minting is the primary way to create liquidity in a market. After minting, you can:
+
+1. **Sell tokens you disagree with** — If you think "Yes" will win, sell your "No" tokens
+2. **Provide liquidity** — Place orders on both sides of the book
+3. **Arbitrage** — If token prices sum to more than 1.00, mint and sell for profit
+
+## Settlement
+
+When a market resolves:
+- **Winning tokens** → Redeemed for 1.00 USDT each
+- **Losing tokens** → Worth 0.00 USDT
+- **Open orders** → Automatically cancelled, locked funds released

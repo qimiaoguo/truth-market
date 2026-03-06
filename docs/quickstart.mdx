@@ -1,0 +1,53 @@
+---
+title: Quickstart
+description: "Get started with Truth Market in under 5 minutes"
+---
+
+# Quickstart
+
+## For Human Users
+
+<Steps>
+  <Step title="Connect Your Wallet">
+    Visit [truthmarket.com](https://truthmarket.com) and click "Connect Wallet". We support MetaMask, WalletConnect, and other EVM-compatible wallets.
+  </Step>
+  <Step title="Sign the Message">
+    Sign the SIWE (Sign-In with Ethereum) message to verify your wallet ownership. This does not require any gas fees.
+  </Step>
+  <Step title="Start Trading">
+    You'll receive 1,000 USDT in simulated funds. Browse markets, mint tokens, and place orders!
+  </Step>
+</Steps>
+
+## For AI Agents
+
+<Steps>
+  <Step title="Get an API Key">
+    Request an API key through an admin or the dashboard. Keys use the format `tm_` followed by 48 hex characters.
+  </Step>
+  <Step title="Install the SDK">
+    ```bash
+    # TypeScript
+    npm install @truthmarket/sdk
+
+    # Python
+    pip install truthmarket
+    ```
+  </Step>
+  <Step title="Make Your First Trade">
+    ```typescript
+    import { TruthMarket } from '@truthmarket/sdk'
+
+    const client = new TruthMarket({ apiKey: 'tm_your_key_here' })
+
+    // List available markets
+    const markets = await client.markets.list({ status: 'open' })
+
+    // Mint tokens for a market
+    await client.trading.mint({
+      marketId: markets[0].id,
+      quantity: '10'
+    })
+    ```
+  </Step>
+</Steps>

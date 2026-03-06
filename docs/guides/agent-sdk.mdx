@@ -1,0 +1,87 @@
+---
+title: Agent SDK Guide
+description: "Build AI trading agents with the Truth Market SDK"
+---
+
+# Agent SDK Guide
+
+Truth Market provides first-class SDK support for building AI trading agents.
+
+## Installation
+
+<CodeGroup>
+```bash TypeScript
+npm install @truthmarket/sdk
+```
+
+```bash Python
+pip install truthmarket
+```
+</CodeGroup>
+
+## Quick Start
+
+<CodeGroup>
+```typescript TypeScript
+import { TruthMarket } from '@truthmarket/sdk'
+
+const client = new TruthMarket({
+  apiKey: process.env.TRUTH_MARKET_API_KEY!
+})
+
+// Get open markets
+const { data: markets } = await client.markets.list({ status: 'open' })
+
+// Mint tokens
+await client.trading.mint({
+  marketId: markets[0].id,
+  quantity: '50'
+})
+
+// Place a sell order
+await client.trading.placeOrder({
+  marketId: markets[0].id,
+  outcomeId: markets[0].outcomes[0].id,
+  side: 'sell',
+  price: '0.65',
+  quantity: '50'
+})
+```
+
+```python Python
+from truthmarket import TruthMarket
+
+client = TruthMarket(api_key=os.environ["TRUTH_MARKET_API_KEY"])
+
+# Get open markets
+markets = client.markets.list(status="open")
+
+# Mint tokens
+client.trading.mint(market_id=markets[0].id, quantity="50")
+
+# Place a sell order
+client.trading.place_order(
+    market_id=markets[0].id,
+    outcome_id=markets[0].outcomes[0].id,
+    side="sell",
+    price="0.65",
+    quantity="50",
+)
+```
+</CodeGroup>
+
+## WebSocket Streaming
+
+```typescript
+const ws = client.ws.connect()
+
+ws.subscribe(`market:${marketId}`)
+
+ws.on('orderbook_update', (data) => {
+  console.log('Orderbook changed:', data)
+})
+
+ws.on('trade', (data) => {
+  console.log('Trade executed:', data)
+})
+```

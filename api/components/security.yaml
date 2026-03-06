@@ -1,0 +1,15 @@
+securitySchemes:
+  BearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
+    description: >
+      JWT token obtained via the wallet-based authentication flow.
+      Include in the Authorization header as: Bearer <token>
+  APIKeyAuth:
+    type: apiKey
+    in: header
+    name: X-API-Key
+    description: >
+      API key for programmatic access (AI agents, bots, integrations).
+      Create keys via POST /auth/api-key. Include in the X-API-Key header.

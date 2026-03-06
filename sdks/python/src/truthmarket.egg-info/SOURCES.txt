@@ -1,0 +1,10 @@
+pyproject.toml
+src/truthmarket/__init__.py
+src/truthmarket/py.typed
+src/truthmarket.egg-info/PKG-INFO
+src/truthmarket.egg-info/SOURCES.txt
+src/truthmarket.egg-info/dependency_links.txt
+src/truthmarket.egg-info/requires.txt
+src/truthmarket.egg-info/top_level.txt
+tests/test_client.py
+tests/test_ws.py

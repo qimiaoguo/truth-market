@@ -1,0 +1,58 @@
+---
+title: API Overview
+description: "Truth Market REST API reference"
+---
+
+# API Overview
+
+The Truth Market API is a RESTful API served at `https://api.truthmarket.com/api/v1/`.
+
+## Base URL
+
+```
+https://api.truthmarket.com/api/v1
+```
+
+## Authentication
+
+All endpoints except `GET /auth/nonce` and `POST /auth/verify` require authentication. See [Authentication](/authentication) for details.
+
+## Response Format
+
+All responses follow a consistent format:
+
+```json
+{
+  "ok": true,
+  "data": { ... },
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total": 100
+  }
+}
+```
+
+Error responses:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Market not found"
+  }
+}
+```
+
+## Error Codes
+
+| Code | HTTP Status | Description |
+|------|------------|-------------|
+| `VALIDATION_ERROR` | 400 | Invalid request parameters |
+| `UNAUTHORIZED` | 401 | Missing or invalid authentication |
+| `FORBIDDEN` | 403 | Insufficient permissions |
+| `NOT_FOUND` | 404 | Resource not found |
+| `CONFLICT` | 409 | Conflict (e.g., duplicate) |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `INTERNAL_ERROR` | 500 | Server error |

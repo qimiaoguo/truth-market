@@ -1,0 +1,209 @@
+openapi: "3.1.0"
+info:
+  title: Truth Market API
+  description: >
+    Prediction market platform API for humans and AI agents.
+
+
+    Truth Market allows users to create, trade, and resolve prediction markets.
+    Participants buy and sell outcome tokens whose prices reflect the crowd's
+    implied probability of each outcome.  Both human traders and autonomous AI
+    agents are first-class citizens.
+
+
+    ## Authentication
+
+
+    Two authentication methods are supported:
+
+    - **Bearer JWT** -- obtained via the wallet-based sign-in flow
+      (GET /auth/nonce, POST /auth/verify).
+
+    - **API Key** -- created via POST /auth/api-key and passed in the
+      `X-API-Key` header.  Ideal for bots and programmatic access.
+
+
+    Public endpoints (market listing, order book, rankings) do not require
+    authentication.
+
+
+    ## Response envelope
+
+
+    Every response follows the standard envelope:
+
+    ```json
+    {
+      "ok": true,
+      "data": { ... },
+      "error": { "code": "...", "message": "..." },
+      "meta": { "page": 1, "per_page": 20, "total": 142 }
+    }
+    ```
+
+    - `ok` is always present.
+
+    - `data` is present on success.
+
+    - `error` is present on failure.
+
+    - `meta` is present for paginated list endpoints.
+
+
+    ## Monetary values
+
+
+    All monetary and quantity values are represented as **strings** with
+    decimal precision (e.g. `"125000.00"`) to avoid floating-point issues.
+    Prices are always between `"0.01"` and `"0.99"`.
+  version: "1.0.0"
+  contact:
+    name: Truth Market Engineering
+    url: https://truthmarket.com
+    email: api@truthmarket.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.truthmarket.com/api/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+  - APIKeyAuth: []
+
+tags:
+  - name: Auth
+    description: >
+      Wallet-based authentication and API key management.
+  - name: Markets
+    description: >
+      Browse prediction markets, view outcomes, and inspect order books.
+  - name: Trading
+    description: >
+      Mint outcome tokens, place and cancel orders, and view positions.
+  - name: Rankings
+    description: >
+      Leaderboards and per-user ranking breakdowns.
+  - name: Admin
+    description: >
+      Market lifecycle management.  All endpoints in this group require
+      the admin role.
+
+paths:
+  # Auth
+  /auth/nonce:
+    $ref: "auth.yaml#/paths/~1auth~1nonce"
+  /auth/verify:
+    $ref: "auth.yaml#/paths/~1auth~1verify"
+  /auth/api-key:
+    $ref: "auth.yaml#/paths/~1auth~1api-key"
+  /auth/api-key/{id}:
+    $ref: "auth.yaml#/paths/~1auth~1api-key~1%7Bid%7D"
+  /auth/me:
+    $ref: "auth.yaml#/paths/~1auth~1me"
+
+  # Markets
+  /markets:
+    $ref: "markets.yaml#/paths/~1markets"
+  /markets/{id}:
+    $ref: "markets.yaml#/paths/~1markets~1%7Bid%7D"
+  /markets/{id}/orderbook:
+    $ref: "markets.yaml#/paths/~1markets~1%7Bid%7D~1orderbook"
+
+  # Trading
+  /trading/mint:
+    $ref: "trading.yaml#/paths/~1trading~1mint"
+  /trading/orders:
+    $ref: "trading.yaml#/paths/~1trading~1orders"
+  /trading/orders/{id}:
+    $ref: "trading.yaml#/paths/~1trading~1orders~1%7Bid%7D"
+  /trading/positions:
+    $ref: "trading.yaml#/paths/~1trading~1positions"
+
+  # Rankings
+  /rankings:
+    $ref: "rankings.yaml#/paths/~1rankings"
+  /rankings/user/{id}:
+    $ref: "rankings.yaml#/paths/~1rankings~1user~1%7Bid%7D"
+
+  # Admin
+  /admin/markets:
+    $ref: "admin.yaml#/paths/~1admin~1markets"
+  /admin/markets/{id}/status:
+    $ref: "admin.yaml#/paths/~1admin~1markets~1%7Bid%7D~1status"
+  /admin/markets/{id}/resolve:
+    $ref: "admin.yaml#/paths/~1admin~1markets~1%7Bid%7D~1resolve"
+  /admin/markets/{id}/cancel:
+    $ref: "admin.yaml#/paths/~1admin~1markets~1%7Bid%7D~1cancel"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: "components/security.yaml#/securitySchemes/BearerAuth"
+    APIKeyAuth:
+      $ref: "components/security.yaml#/securitySchemes/APIKeyAuth"
+  schemas:
+    User:
+      $ref: "components/schemas.yaml#/schemas/User"
+    Market:
+      $ref: "components/schemas.yaml#/schemas/Market"
+    Outcome:
+      $ref: "components/schemas.yaml#/schemas/Outcome"
+    Order:
+      $ref: "components/schemas.yaml#/schemas/Order"
+    Trade:
+      $ref: "components/schemas.yaml#/schemas/Trade"
+    Position:
+      $ref: "components/schemas.yaml#/schemas/Position"
+    MintTransaction:
+      $ref: "components/schemas.yaml#/schemas/MintTransaction"
+    UserRanking:
+      $ref: "components/schemas.yaml#/schemas/UserRanking"
+    PriceLevel:
+      $ref: "components/schemas.yaml#/schemas/PriceLevel"
+    ApiKey:
+      $ref: "components/schemas.yaml#/schemas/ApiKey"
+    ApiResponse:
+      $ref: "components/schemas.yaml#/schemas/ApiResponse"
+    ErrorDetail:
+      $ref: "components/schemas.yaml#/schemas/ErrorDetail"
+    Pagination:
+      $ref: "components/schemas.yaml#/schemas/Pagination"
+  parameters:
+    PageParam:
+      $ref: "components/parameters.yaml#/parameters/PageParam"
+    PerPageParam:
+      $ref: "components/parameters.yaml#/parameters/PerPageParam"
+    MarketIdQueryParam:
+      $ref: "components/parameters.yaml#/parameters/MarketIdQueryParam"
+    MarketIdPathParam:
+      $ref: "components/parameters.yaml#/parameters/MarketIdPathParam"
+    OrderIdPathParam:
+      $ref: "components/parameters.yaml#/parameters/OrderIdPathParam"
+    ApiKeyIdPathParam:
+      $ref: "components/parameters.yaml#/parameters/ApiKeyIdPathParam"
+    UserIdPathParam:
+      $ref: "components/parameters.yaml#/parameters/UserIdPathParam"
+  responses:
+    SuccessResponse:
+      $ref: "components/responses.yaml#/responses/SuccessResponse"
+    PaginatedResponse:
+      $ref: "components/responses.yaml#/responses/PaginatedResponse"
+    BadRequest:
+      $ref: "components/responses.yaml#/responses/BadRequest"
+    Unauthorized:
+      $ref: "components/responses.yaml#/responses/Unauthorized"
+    Forbidden:
+      $ref: "components/responses.yaml#/responses/Forbidden"
+    NotFound:
+      $ref: "components/responses.yaml#/responses/NotFound"
+    Conflict:
+      $ref: "components/responses.yaml#/responses/Conflict"
+    UnprocessableEntity:
+      $ref: "components/responses.yaml#/responses/UnprocessableEntity"
+    InternalServerError:
+      $ref: "components/responses.yaml#/responses/InternalServerError"

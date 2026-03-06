@@ -1,0 +1,163 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: truthmarket
+      POSTGRES_PASSWORD: truthmarket
+      POSTGRES_DB: truthmarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U truthmarket"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.68
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector HTTP
+      - "14250:14250"  # Jaeger collector gRPC
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: gateway
+    environment:
+      PORT: "8080"
+      AUTH_SVC_ADDR: "auth-svc:9001"
+      MARKET_SVC_ADDR: "market-svc:9002"
+      TRADING_SVC_ADDR: "trading-svc:9003"
+      RANKING_SVC_ADDR: "ranking-svc:9004"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    ports:
+      - "8080:8080"
+    depends_on:
+      auth-svc:
+        condition: service_started
+      market-svc:
+        condition: service_started
+      trading-svc:
+        condition: service_started
+      ranking-svc:
+        condition: service_started
+
+  auth-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: auth-svc
+    environment:
+      GRPC_PORT: "9001"
+      DATABASE_URL: "postgres://truthmarket:truthmarket@postgres:5432/truthmarket?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: "${JWT_SECRET:-dev-secret-change-me}"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  market-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: market-svc
+    environment:
+      GRPC_PORT: "9002"
+      DATABASE_URL: "postgres://truthmarket:truthmarket@postgres:5432/truthmarket?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      TRADING_SVC_ADDR: "trading-svc:9003"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  trading-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: trading-svc
+    environment:
+      GRPC_PORT: "9003"
+      DATABASE_URL: "postgres://truthmarket:truthmarket@postgres:5432/truthmarket?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ranking-svc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: ranking-svc
+    environment:
+      GRPC_PORT: "9004"
+      DATABASE_URL: "postgres://truthmarket:truthmarket@postgres:5432/truthmarket?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: "http://gateway:8080"
+    ports:
+      - "3000:3000"
+    depends_on:
+      gateway:
+        condition: service_started
+
+volumes:
+  postgres_data:

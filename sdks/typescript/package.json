@@ -1,0 +1,19 @@
+{
+  "name": "@truthmarket/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Truth Market prediction market API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "msw": "^2.7.0"
+  },
+  "license": "MIT"
+}

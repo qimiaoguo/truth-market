@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"testing"
@@ -296,6 +298,146 @@ func TestVerifySIWE_ExpiredNonce_ReturnsError(t *testing.T) {
 		"error should be UNAUTHORIZED for expired nonce, got: %v", err)
 	assert.Nil(t, user, "no user should be returned with expired nonce")
 	assert.Empty(t, token, "no token should be returned with expired nonce")
+}
+
+// ---------------------------------------------------------------------------
+// Tests: GetUser
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tests: ValidateToken
+// ---------------------------------------------------------------------------
+
+func TestValidateToken_ValidToken_ReturnsUser(t *testing.T) {
+	svc, userRepo, _ := newTestAuthService()
+	ctx := context.Background()
+
+	// Seed a user.
+	expected := &domain.User{
+		ID:            "user-456",
+		WalletAddress: "0xABCDEF1234567890abcdef1234567890ABCDEF12",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(500),
+		LockedBalance: decimal.NewFromInt(25),
+		CreatedAt:     time.Now(),
+	}
+	seedUser(userRepo, expected)
+
+	// Generate a JWT for the user via the service (uses the same secret).
+	token, err := svc.generateJWT(expected.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+
+	// Validate the token.
+	user, err := svc.ValidateToken(ctx, token)
+	require.NoError(t, err)
+	require.NotNil(t, user)
+
+	assert.Equal(t, expected.ID, user.ID)
+	assert.Equal(t, expected.WalletAddress, user.WalletAddress)
+	assert.True(t, expected.Balance.Equal(user.Balance), "balance should match")
+}
+
+func TestValidateToken_ExpiredToken_ReturnsError(t *testing.T) {
+	svc, userRepo, _ := newTestAuthService()
+	ctx := context.Background()
+
+	// Seed a user.
+	user := &domain.User{
+		ID:            "user-789",
+		WalletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(100),
+		LockedBalance: decimal.NewFromInt(0),
+		CreatedAt:     time.Now(),
+	}
+	seedUser(userRepo, user)
+
+	// Build an expired token manually using the same JWT construction as
+	// generateJWT but with an expiration in the past.
+	token := buildTestJWT(t, user.ID, time.Now().Add(-1*time.Hour).Unix(), "test-jwt-secret")
+
+	result, err := svc.ValidateToken(ctx, token)
+	assert.Error(t, err, "expired token should produce an error")
+	assert.True(t, apperrors.IsUnauthorized(err),
+		"error should be UNAUTHORIZED, got: %v", err)
+	assert.Nil(t, result, "no user should be returned for expired token")
+}
+
+func TestValidateToken_InvalidSignature_ReturnsError(t *testing.T) {
+	svc, userRepo, _ := newTestAuthService()
+	ctx := context.Background()
+
+	// Seed a user.
+	user := &domain.User{
+		ID:            "user-789",
+		WalletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(100),
+		LockedBalance: decimal.NewFromInt(0),
+		CreatedAt:     time.Now(),
+	}
+	seedUser(userRepo, user)
+
+	// Build a token signed with a DIFFERENT secret.
+	token := buildTestJWT(t, user.ID, time.Now().Add(24*time.Hour).Unix(), "wrong-secret")
+
+	result, err := svc.ValidateToken(ctx, token)
+	assert.Error(t, err, "tampered token should produce an error")
+	assert.True(t, apperrors.IsUnauthorized(err),
+		"error should be UNAUTHORIZED, got: %v", err)
+	assert.Nil(t, result, "no user should be returned for tampered token")
+}
+
+func TestValidateToken_MalformedToken_ReturnsError(t *testing.T) {
+	svc, _, _ := newTestAuthService()
+	ctx := context.Background()
+
+	result, err := svc.ValidateToken(ctx, "not-a-jwt")
+	assert.Error(t, err, "malformed token should produce an error")
+	assert.True(t, apperrors.IsUnauthorized(err),
+		"error should be UNAUTHORIZED, got: %v", err)
+	assert.Nil(t, result, "no user should be returned for malformed token")
+}
+
+func TestValidateToken_UserNotFound_ReturnsError(t *testing.T) {
+	svc, _, _ := newTestAuthService()
+	ctx := context.Background()
+
+	// Generate a valid token for a user ID that does not exist in the repo.
+	token := buildTestJWT(t, "nonexistent-user-id", time.Now().Add(24*time.Hour).Unix(), "test-jwt-secret")
+
+	result, err := svc.ValidateToken(ctx, token)
+	assert.Error(t, err, "token for missing user should produce an error")
+	assert.True(t, apperrors.IsUnauthorized(err),
+		"error should be UNAUTHORIZED, got: %v", err)
+	assert.Nil(t, result, "no user should be returned when user not found")
+}
+
+// buildTestJWT constructs a JWT token with the given subject, expiration, and
+// secret. This mirrors the hand-rolled JWT logic in generateJWT so tests can
+// produce tokens with custom claims.
+func buildTestJWT(t *testing.T, sub string, exp int64, secret string) string {
+	t.Helper()
+
+	header := base64URLEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
+
+	payload := fmt.Sprintf(`{"sub":"%s","exp":%d,"iat":%d}`, sub, exp, time.Now().Unix())
+	encodedPayload := base64URLEncode([]byte(payload))
+
+	signingInput := header + "." + encodedPayload
+
+	mac := hmacSHA256([]byte(signingInput), []byte(secret))
+	sig := base64URLEncode(mac)
+
+	return signingInput + "." + sig
+}
+
+// hmacSHA256 returns the HMAC-SHA256 of data using the given key.
+func hmacSHA256(data, key []byte) []byte {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 // ---------------------------------------------------------------------------

@@ -124,6 +124,74 @@ func (s *AuthService) VerifySIWE(ctx context.Context, message, signature, wallet
 	return user, token, nil
 }
 
+// ValidateToken parses and validates a JWT token string. It verifies the
+// HMAC-SHA256 signature, checks the expiration claim, extracts the subject
+// (user ID), and returns the corresponding user from the repository.
+func (s *AuthService) ValidateToken(ctx context.Context, token string) (*domain.User, error) {
+	// Split the token into its three parts: header.payload.signature.
+	parts := strings.SplitN(token, ".", 3)
+	if len(parts) != 3 {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid token format")
+	}
+
+	header, payload, sig := parts[0], parts[1], parts[2]
+
+	// Verify the HMAC-SHA256 signature.
+	signingInput := header + "." + payload
+	mac := hmac.New(sha256.New, []byte(s.jwtSecret))
+	mac.Write([]byte(signingInput))
+	expectedSig := base64URLEncode(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid token signature")
+	}
+
+	// Decode the payload.
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid token payload")
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid token claims")
+	}
+
+	// Check the expiration claim.
+	expVal, ok := claims["exp"]
+	if !ok {
+		return nil, apperrors.New("UNAUTHORIZED", "token missing exp claim")
+	}
+	expFloat, ok := expVal.(float64)
+	if !ok {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid exp claim")
+	}
+	if time.Now().Unix() > int64(expFloat) {
+		return nil, apperrors.New("UNAUTHORIZED", "token expired")
+	}
+
+	// Extract the subject (user ID).
+	subVal, ok := claims["sub"]
+	if !ok {
+		return nil, apperrors.New("UNAUTHORIZED", "token missing sub claim")
+	}
+	userID, ok := subVal.(string)
+	if !ok || userID == "" {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid sub claim")
+	}
+
+	// Look up the user by ID.
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if apperrors.IsNotFound(err) {
+			return nil, apperrors.New("UNAUTHORIZED", "user not found")
+		}
+		return nil, fmt.Errorf("failed to look up user: %w", err)
+	}
+
+	return user, nil
+}
+
 // GetUser retrieves a user by their ID from the repository.
 func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)

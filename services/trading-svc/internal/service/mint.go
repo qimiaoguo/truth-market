@@ -110,3 +110,25 @@ func (s *MintService) MintTokens(ctx context.Context, userID, marketID string, q
 
 	return positions, nil
 }
+
+// GetPositions returns positions for a user. If marketID is non-empty, results
+// are filtered to only include positions in that market.
+func (s *MintService) GetPositions(ctx context.Context, userID, marketID string) ([]*domain.Position, error) {
+	positions, err := s.positionRepo.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if marketID == "" {
+		return positions, nil
+	}
+
+	// Filter by market.
+	var filtered []*domain.Position
+	for _, p := range positions {
+		if p.MarketID == marketID {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered, nil
+}

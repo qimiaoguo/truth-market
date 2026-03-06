@@ -206,6 +206,52 @@ func (s *OrderService) GetOrder(ctx context.Context, orderID string) (*domain.Or
 	return s.orderRepo.GetByID(ctx, orderID)
 }
 
+// ListOrdersFilter specifies the filter criteria for listing orders.
+type ListOrdersFilter struct {
+	UserID   string
+	MarketID string
+	Status   domain.OrderStatus
+	Limit    int
+	Offset   int
+}
+
+// ListOrders returns orders matching the given filter criteria.
+// If UserID is provided, orders are filtered by user.
+// The MarketID and Status fields provide additional filtering.
+func (s *OrderService) ListOrders(ctx context.Context, filter ListOrdersFilter) ([]*domain.Order, int64, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Use the repository to fetch orders by user with pagination.
+	orders, _, err := s.orderRepo.ListByUser(ctx, filter.UserID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Apply additional in-memory filters for market and status.
+	var filtered []*domain.Order
+	for _, o := range orders {
+		if filter.MarketID != "" && o.MarketID != filter.MarketID {
+			continue
+		}
+		if filter.Status != "" && o.Status != filter.Status {
+			continue
+		}
+		filtered = append(filtered, o)
+	}
+
+	// Adjust total to reflect the filtered count. Since the repository
+	// pagination is user-level and we apply additional filters in-memory,
+	// the most accurate total for the caller is the filtered length.
+	return filtered, int64(len(filtered)), nil
+}
+
 // CancelAllOrdersByMarket cancels all open orders for a given market.
 // For buy orders, locked funds are released back to the user's available balance.
 // For sell orders, the unfilled quantity is restored to the user's position.

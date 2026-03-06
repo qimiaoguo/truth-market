@@ -35,17 +35,40 @@ type PlaceOrderRequest struct {
 	Quantity  decimal.Decimal
 }
 
+// ListOrdersFilter specifies the filter criteria for listing orders.
+type ListOrdersFilter struct {
+	UserID   string
+	MarketID string
+	Status   domain.OrderStatus
+	Limit    int
+	Offset   int
+}
+
 // OrderServicer defines the business operations for order management.
 type OrderServicer interface {
 	PlaceOrder(ctx context.Context, req PlaceOrderRequest) (*domain.Order, []*domain.Trade, error)
 	CancelOrder(ctx context.Context, userID, orderID string) error
 	GetOrder(ctx context.Context, orderID string) (*domain.Order, error)
+	ListOrders(ctx context.Context, filter ListOrdersFilter) ([]*domain.Order, int64, error)
 	CancelAllOrdersByMarket(ctx context.Context, marketID string) (int64, error)
 }
 
 // MintServicer defines the business operations for token minting.
 type MintServicer interface {
 	MintTokens(ctx context.Context, userID, marketID string, quantity decimal.Decimal) ([]*domain.Position, error)
+	GetPositions(ctx context.Context, userID, marketID string) ([]*domain.Position, error)
+}
+
+// OrderbookLevel represents aggregated order information at a single price point.
+type OrderbookLevel struct {
+	Price    decimal.Decimal
+	Quantity decimal.Decimal
+	Count    int
+}
+
+// OrderbookProvider exposes read-only access to orderbook depth data.
+type OrderbookProvider interface {
+	GetOrderbookDepth(outcomeID string, levels int) (bids, asks []OrderbookLevel)
 }
 
 // ---------------------------------------------------------------------------
@@ -53,18 +76,34 @@ type MintServicer interface {
 // ---------------------------------------------------------------------------
 
 // TradingServer implements tradingv1.TradingServiceServer by delegating to
-// the OrderServicer and MintServicer interfaces.
+// the OrderServicer, MintServicer, and OrderbookProvider interfaces.
 type TradingServer struct {
 	tradingv1.UnimplementedTradingServiceServer
-	orderService OrderServicer
-	mintService  MintServicer
+	orderService      OrderServicer
+	mintService       MintServicer
+	orderbookProvider OrderbookProvider
 }
 
 // NewTradingServer constructs a TradingServer with the given service dependencies.
-func NewTradingServer(orderSvc OrderServicer, mintSvc MintServicer) *TradingServer {
-	return &TradingServer{
+// The orderbookProvider may be nil if orderbook queries are not supported.
+func NewTradingServer(orderSvc OrderServicer, mintSvc MintServicer, opts ...Option) *TradingServer {
+	s := &TradingServer{
 		orderService: orderSvc,
 		mintService:  mintSvc,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// Option configures optional dependencies on TradingServer.
+type Option func(*TradingServer)
+
+// WithOrderbookProvider sets the orderbook provider for depth queries.
+func WithOrderbookProvider(p OrderbookProvider) Option {
+	return func(s *TradingServer) {
+		s.orderbookProvider = p
 	}
 }
 
@@ -137,9 +176,42 @@ func (s *TradingServer) GetOrder(ctx context.Context, req *tradingv1.GetOrderReq
 	}, nil
 }
 
-// ListOrders is a placeholder for listing orders with filters.
-func (s *TradingServer) ListOrders(_ context.Context, _ *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "ListOrders not yet implemented")
+// ListOrders returns orders matching the supplied filters.
+func (s *TradingServer) ListOrders(ctx context.Context, req *tradingv1.ListOrdersRequest) (*tradingv1.ListOrdersResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	filter := ListOrdersFilter{
+		UserID:   req.GetUserId(),
+		MarketID: req.GetMarketId(),
+		Status:   protoOrderStatusToDomain(req.GetStatus()),
+	}
+
+	// Convert page/per_page to limit/offset.
+	perPage := int(req.GetPerPage())
+	if perPage <= 0 {
+		perPage = 50
+	}
+	page := int(req.GetPage())
+	if page <= 0 {
+		page = 1
+	}
+	filter.Limit = perPage
+	filter.Offset = (page - 1) * perPage
+
+	orders, total, err := s.orderService.ListOrders(ctx, filter)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+
+	resp := &tradingv1.ListOrdersResponse{
+		Total: total,
+	}
+	for _, o := range orders {
+		resp.Orders = append(resp.Orders, domainOrderToProto(o))
+	}
+	return resp, nil
 }
 
 // MintTokens creates a complete set of outcome tokens for a market.
@@ -164,14 +236,52 @@ func (s *TradingServer) MintTokens(ctx context.Context, req *tradingv1.MintToken
 	return resp, nil
 }
 
-// GetPositions retrieves user positions for a market.
-func (s *TradingServer) GetPositions(_ context.Context, _ *tradingv1.GetPositionsRequest) (*tradingv1.GetPositionsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "GetPositions not yet implemented")
+// GetPositions retrieves user positions, optionally filtered by market.
+func (s *TradingServer) GetPositions(ctx context.Context, req *tradingv1.GetPositionsRequest) (*tradingv1.GetPositionsResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+
+	positions, err := s.mintService.GetPositions(ctx, req.GetUserId(), req.GetMarketId())
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+
+	resp := &tradingv1.GetPositionsResponse{}
+	for _, p := range positions {
+		resp.Positions = append(resp.Positions, domainPositionToProto(p))
+	}
+	return resp, nil
 }
 
 // GetOrderbook retrieves the order book depth for an outcome.
-func (s *TradingServer) GetOrderbook(_ context.Context, _ *tradingv1.GetOrderbookRequest) (*tradingv1.GetOrderbookResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "GetOrderbook not yet implemented")
+func (s *TradingServer) GetOrderbook(_ context.Context, req *tradingv1.GetOrderbookRequest) (*tradingv1.GetOrderbookResponse, error) {
+	if req.GetOutcomeId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "outcome_id is required")
+	}
+	if s.orderbookProvider == nil {
+		return nil, status.Error(codes.Unimplemented, "orderbook provider not configured")
+	}
+
+	const defaultDepth = 20
+	bids, asks := s.orderbookProvider.GetOrderbookDepth(req.GetOutcomeId(), defaultDepth)
+
+	resp := &tradingv1.GetOrderbookResponse{}
+	for _, b := range bids {
+		resp.Bids = append(resp.Bids, &tradingv1.OrderbookLevel{
+			Price:      b.Price.String(),
+			Quantity:   b.Quantity.String(),
+			OrderCount: int32(b.Count),
+		})
+	}
+	for _, a := range asks {
+		resp.Asks = append(resp.Asks, &tradingv1.OrderbookLevel{
+			Price:      a.Price.String(),
+			Quantity:   a.Quantity.String(),
+			OrderCount: int32(a.Count),
+		})
+	}
+	return resp, nil
 }
 
 // CancelAllOrdersByMarket cancels all open orders for a market.
@@ -283,6 +393,23 @@ func domainOrderStatusToProto(s domain.OrderStatus) tradingv1.OrderStatus {
 		return tradingv1.OrderStatus_ORDER_STATUS_CANCELLED
 	default:
 		return tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
+	}
+}
+
+// protoOrderStatusToDomain converts a proto OrderStatus to the domain type.
+// Returns an empty string for UNSPECIFIED so callers can treat it as "no filter".
+func protoOrderStatusToDomain(s tradingv1.OrderStatus) domain.OrderStatus {
+	switch s {
+	case tradingv1.OrderStatus_ORDER_STATUS_OPEN:
+		return domain.OrderStatusOpen
+	case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
+		return domain.OrderStatusPartial
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED:
+		return domain.OrderStatusFilled
+	case tradingv1.OrderStatus_ORDER_STATUS_CANCELLED:
+		return domain.OrderStatusCancelled
+	default:
+		return ""
 	}
 }
 

@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	goredis "github.com/redis/go-redis/v9"
+	"github.com/truthmarket/truth-market/services/gateway/internal/middleware"
+	infraredis "github.com/truthmarket/truth-market/infra/redis"
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
@@ -92,8 +95,27 @@ func main() {
 	_ = tradingConn
 	_ = rankingConn
 
+	// ---------- Redis rate limiter ----------
+	var rateLimiter middleware.RateLimiter
+
+	redisClient := goredis.NewClient(&goredis.Options{
+		Addr: cfg.RedisAddr,
+	})
+
+	// Verify Redis connectivity. If the ping fails, the gateway starts
+	// without rate limiting so it is not hard-dependent on Redis.
+	pingCtx, pingCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer pingCancel()
+
+	if err := redisClient.Ping(pingCtx).Err(); err != nil {
+		log.Warn("redis unavailable, rate limiting disabled", "addr", cfg.RedisAddr, "error", err)
+	} else {
+		rateLimiter = infraredis.NewRateLimiter(redisClient)
+		log.Info("rate limiter enabled", "addr", cfg.RedisAddr)
+	}
+
 	// ---------- HTTP Router ----------
-	router := internal.SetupRouter(serviceName)
+	router := internal.SetupRouter(serviceName, rateLimiter)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

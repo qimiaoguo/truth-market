@@ -220,6 +220,63 @@ func TestGRPC_ValidateAPIKey_InvalidKey_ReturnsError(t *testing.T) {
 	assert.Equal(t, "invalid api key", st.Message())
 }
 
+func TestGRPC_ValidateToken_ValidToken_ReturnsUser(t *testing.T) {
+	env := newTestEnv(t)
+
+	u := testUser()
+	env.authSvc.validateTokenFn = func(_ context.Context, token string) (*domain.User, error) {
+		assert.Equal(t, "valid-jwt-token", token)
+		return u, nil
+	}
+
+	resp, err := env.client.ValidateToken(context.Background(), &authv1.ValidateTokenRequest{
+		Token: "valid-jwt-token",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, u.ID, resp.GetUser().GetId())
+	assert.Equal(t, u.WalletAddress, resp.GetUser().GetWalletAddress())
+	assert.Equal(t, authv1.UserType_USER_TYPE_HUMAN, resp.GetUser().GetUserType())
+	assert.Equal(t, u.Balance.String(), resp.GetUser().GetBalance())
+}
+
+func TestGRPC_ValidateToken_InvalidToken_ReturnsError(t *testing.T) {
+	env := newTestEnv(t)
+
+	env.authSvc.validateTokenFn = func(_ context.Context, _ string) (*domain.User, error) {
+		return nil, apperrors.New("UNAUTHORIZED", "invalid token signature")
+	}
+
+	resp, err := env.client.ValidateToken(context.Background(), &authv1.ValidateTokenRequest{
+		Token: "bad-token",
+	})
+	assert.Nil(t, resp)
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	assert.Equal(t, "invalid token signature", st.Message())
+}
+
+func TestGRPC_ValidateToken_ExpiredToken_ReturnsError(t *testing.T) {
+	env := newTestEnv(t)
+
+	env.authSvc.validateTokenFn = func(_ context.Context, _ string) (*domain.User, error) {
+		return nil, apperrors.New("UNAUTHORIZED", "token expired")
+	}
+
+	resp, err := env.client.ValidateToken(context.Background(), &authv1.ValidateTokenRequest{
+		Token: "expired-token",
+	})
+	assert.Nil(t, resp)
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st.Code())
+	assert.Equal(t, "token expired", st.Message())
+}
+
 func TestGRPC_GetUser_ReturnsUser(t *testing.T) {
 	env := newTestEnv(t)
 

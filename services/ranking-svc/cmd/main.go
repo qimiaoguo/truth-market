@@ -13,7 +13,10 @@ import (
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
+	rankingv1 "github.com/truthmarket/truth-market/proto/gen/go/ranking/v1"
 	"github.com/truthmarket/truth-market/services/ranking-svc/internal/config"
+	rankinggrpc "github.com/truthmarket/truth-market/services/ranking-svc/internal/grpc"
+	"github.com/truthmarket/truth-market/services/ranking-svc/internal/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -68,9 +71,19 @@ func main() {
 		}
 	}()
 
-	// pool and rdb will be used once repos and services are wired.
-	_ = pool
-	_ = rdb
+	// ---------- Repos ----------
+	rankingRepo := postgres.NewRankingRepo(pool)
+	userRepo := postgres.NewUserRepo(pool)
+	positionRepo := postgres.NewPositionRepo(pool)
+	rankingCache := infraredis.NewRankingCache(rdb)
+
+	// ---------- Services ----------
+	rankingSvc := service.NewRankingService(rankingRepo, userRepo)
+	portfolioSvc := service.NewPortfolioService(positionRepo, userRepo)
+
+	// Suppress unused-variable lint for rankingCache until it is integrated
+	// into a caching layer; the constructor call above validates connectivity.
+	_ = rankingCache
 
 	// ---------- gRPC Server ----------
 	grpcServer := grpc.NewServer(
@@ -82,7 +95,9 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthSrv)
 	healthSrv.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	// TODO: Register ranking service RPCs here.
+	// Register ranking service RPCs.
+	rankingServer := rankinggrpc.NewRankingServer(rankingSvc, &portfolioAdapter{svc: portfolioSvc})
+	rankingv1.RegisterRankingServiceServer(grpcServer, rankingServer)
 
 	// ---------- Listen ----------
 	lis, err := net.Listen("tcp", ":"+cfg.Port)
@@ -104,4 +119,39 @@ func main() {
 	log.Info("shutting down ranking-svc")
 	grpcServer.GracefulStop()
 	log.Info("ranking-svc stopped")
+}
+
+// ---------------------------------------------------------------------------
+// portfolioAdapter bridges service.PortfolioService (which returns
+// *service.Portfolio) to the rankinggrpc.PortfolioServicer interface (which
+// expects *rankinggrpc.Portfolio). The two Portfolio types are structurally
+// identical but live in different packages.
+// ---------------------------------------------------------------------------
+
+type portfolioAdapter struct {
+	svc *service.PortfolioService
+}
+
+func (a *portfolioAdapter) GetPortfolio(ctx context.Context, userID string) (*rankinggrpc.Portfolio, error) {
+	p, err := a.svc.GetPortfolio(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	positions := make([]rankinggrpc.PortfolioPosition, len(p.Positions))
+	for i, pos := range p.Positions {
+		positions[i] = rankinggrpc.PortfolioPosition{
+			MarketID:  pos.MarketID,
+			OutcomeID: pos.OutcomeID,
+			Quantity:  pos.Quantity,
+			AvgPrice:  pos.AvgPrice,
+			Value:     pos.Value,
+		}
+	}
+
+	return &rankinggrpc.Portfolio{
+		TotalValue:    p.TotalValue,
+		UnrealizedPnL: p.UnrealizedPnL,
+		Positions:     positions,
+	}, nil
 }

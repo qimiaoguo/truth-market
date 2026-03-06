@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 	"github.com/truthmarket/truth-market/pkg/domain"
 	"github.com/truthmarket/truth-market/pkg/repository"
 )
@@ -24,73 +26,110 @@ func NewRankingRepo(pool *pgxpool.Pool) *RankingRepo {
 // compile-time interface check
 var _ repository.RankingRepository = (*RankingRepo)(nil)
 
+// Upsert is a no-op because user_rankings is a materialized view and cannot
+// be written to directly. Rankings are recalculated by calling
+// RefreshMaterializedView instead.
 func (r *RankingRepo) Upsert(ctx context.Context, ranking *domain.UserRanking) error {
-	q := r.Querier(ctx)
-
-	_, err := q.Exec(ctx,
-		`INSERT INTO user_rankings (user_id, user_type, dimension, value, rank, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 ON CONFLICT (user_id, dimension) DO UPDATE SET
-			user_type = EXCLUDED.user_type,
-			value = EXCLUDED.value,
-			rank = EXCLUDED.rank,
-			updated_at = EXCLUDED.updated_at`,
-		ranking.UserID,
-		string(ranking.UserType),
-		string(ranking.Dimension),
-		ranking.Value,
-		ranking.Rank,
-		ranking.UpdatedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("postgres: upsert ranking: %w", err)
-	}
-
+	// user_rankings is a MATERIALIZED VIEW; INSERT/UPDATE is not supported.
+	// Use RefreshMaterializedView to recalculate rankings.
 	return nil
 }
 
+// dimensionColumn maps a RankDimension to the corresponding column in the
+// user_rankings materialized view.
+func dimensionColumn(d domain.RankDimension) string {
+	switch d {
+	case domain.RankDimensionTotalAssets:
+		return "total_assets"
+	case domain.RankDimensionPnL:
+		return "pnl"
+	case domain.RankDimensionVolume:
+		return "volume"
+	case domain.RankDimensionWinRate:
+		return "win_rate"
+	default:
+		return "total_assets"
+	}
+}
+
+// GetByUser returns all ranking dimensions for the specified user. Because the
+// materialized view stores one row per user with every metric as a separate
+// column, this method reads the single row and fans it out into one
+// *domain.UserRanking per dimension.
 func (r *RankingRepo) GetByUser(ctx context.Context, userID string) ([]*domain.UserRanking, error) {
 	q := r.Querier(ctx)
 
-	rows, err := q.Query(ctx,
-		`SELECT user_id, user_type, dimension, value, rank, updated_at
-		 FROM user_rankings WHERE user_id = $1
-		 ORDER BY dimension ASC`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("postgres: get rankings by user: %w", err)
+	// For each dimension we compute the rank with a window function so the
+	// caller receives the user's position on every leaderboard.
+	dimensions := []domain.RankDimension{
+		domain.RankDimensionTotalAssets,
+		domain.RankDimensionPnL,
+		domain.RankDimensionVolume,
+		domain.RankDimensionWinRate,
 	}
-	defer rows.Close()
 
 	var rankings []*domain.UserRanking
-	for rows.Next() {
-		rk, err := scanRankingFromRows(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: get rankings by user scan: %w", err)
-		}
-		rankings = append(rankings, rk)
-	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postgres: get rankings by user rows: %w", err)
+	for _, dim := range dimensions {
+		col := dimensionColumn(dim)
+
+		sql := fmt.Sprintf(
+			`SELECT ur.user_id, ur.user_type, ur.%s, ur.updated_at, ranked.rank
+			 FROM user_rankings ur
+			 JOIN (
+				SELECT user_id, RANK() OVER (ORDER BY %s DESC) AS rank
+				FROM user_rankings
+			 ) ranked ON ranked.user_id = ur.user_id
+			 WHERE ur.user_id = $1`, col, col)
+
+		var (
+			uid       string
+			userType  string
+			value     decimal.Decimal
+			updatedAt time.Time
+			rank      int
+		)
+
+		err := q.QueryRow(ctx, sql, userID).Scan(&uid, &userType, &value, &updatedAt, &rank)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				continue
+			}
+			return nil, fmt.Errorf("postgres: get ranking by user dim=%s: %w", dim, err)
+		}
+
+		rankings = append(rankings, &domain.UserRanking{
+			UserID:    uid,
+			UserType:  domain.UserType(userType),
+			Dimension: dim,
+			Value:     value,
+			Rank:      int(rank),
+			UpdatedAt: updatedAt,
+		})
 	}
 
 	return rankings, nil
 }
 
+// List returns paginated rankings for a single dimension, optionally filtered
+// by user type. The rank is computed on the fly via a window function over the
+// requested dimension column.
 func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter) ([]*domain.UserRanking, int64, error) {
 	q := r.Querier(ctx)
 
+	// Determine which dimension column to use (default to total_assets).
+	dim := domain.RankDimensionTotalAssets
+	if filter.Dimension != nil {
+		dim = *filter.Dimension
+	}
+	col := dimensionColumn(dim)
+
+	// ---- build WHERE clause ----
 	var (
 		wheres []string
 		args   []any
 		idx    int
 	)
-
-	if filter.Dimension != nil {
-		idx++
-		wheres = append(wheres, fmt.Sprintf("dimension = $%d", idx))
-		args = append(args, string(*filter.Dimension))
-	}
 
 	if filter.UserType != nil {
 		idx++
@@ -103,7 +142,7 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 		where = "WHERE " + strings.Join(wheres, " AND ")
 	}
 
-	// Count.
+	// ---- count ----
 	var total int64
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM user_rankings %s", where)
 
@@ -111,7 +150,7 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 		return nil, 0, fmt.Errorf("postgres: list rankings count: %w", err)
 	}
 
-	// Data.
+	// ---- data ----
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
@@ -130,9 +169,12 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 	offsetPlaceholder := fmt.Sprintf("$%d", idx)
 
 	dataSQL := fmt.Sprintf(
-		`SELECT user_id, user_type, dimension, value, rank, updated_at
-		 FROM user_rankings %s ORDER BY rank ASC LIMIT %s OFFSET %s`,
-		where, limitPlaceholder, offsetPlaceholder)
+		`SELECT user_id, user_type, %s, updated_at,
+				RANK() OVER (ORDER BY %s DESC) AS rank
+		 FROM user_rankings %s
+		 ORDER BY rank ASC
+		 LIMIT %s OFFSET %s`,
+		col, col, where, limitPlaceholder, offsetPlaceholder)
 
 	rows, err := q.Query(ctx, dataSQL, args...)
 	if err != nil {
@@ -142,11 +184,26 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 
 	var rankings []*domain.UserRanking
 	for rows.Next() {
-		rk, err := scanRankingFromRows(rows)
-		if err != nil {
+		var (
+			uid       string
+			userType  string
+			value     decimal.Decimal
+			updatedAt time.Time
+			rank      int
+		)
+
+		if err := rows.Scan(&uid, &userType, &value, &updatedAt, &rank); err != nil {
 			return nil, 0, fmt.Errorf("postgres: list rankings scan: %w", err)
 		}
-		rankings = append(rankings, rk)
+
+		rankings = append(rankings, &domain.UserRanking{
+			UserID:    uid,
+			UserType:  domain.UserType(userType),
+			Dimension: dim,
+			Value:     value,
+			Rank:      rank,
+			UpdatedAt: updatedAt,
+		})
 	}
 
 	if err := rows.Err(); err != nil {
@@ -156,35 +213,16 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 	return rankings, total, nil
 }
 
+// RefreshMaterializedView recalculates the user_rankings materialized view.
+// CONCURRENTLY is used so that reads are not blocked during the refresh
+// (requires a unique index on the view, which is present on user_id).
 func (r *RankingRepo) RefreshMaterializedView(ctx context.Context) error {
 	q := r.Querier(ctx)
 
-	_, err := q.Exec(ctx, `REFRESH MATERIALIZED VIEW CONCURRENTLY user_rankings_mv`)
+	_, err := q.Exec(ctx, `REFRESH MATERIALIZED VIEW CONCURRENTLY user_rankings`)
 	if err != nil {
 		return fmt.Errorf("postgres: refresh rankings materialized view: %w", err)
 	}
 
 	return nil
-}
-
-// scanRankingFromRows scans a single ranking from pgx.Rows.
-func scanRankingFromRows(rows pgx.Rows) (*domain.UserRanking, error) {
-	var rk domain.UserRanking
-	var userType, dimension string
-
-	err := rows.Scan(
-		&rk.UserID,
-		&userType,
-		&dimension,
-		&rk.Value,
-		&rk.Rank,
-		&rk.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	rk.UserType = domain.UserType(userType)
-	rk.Dimension = domain.RankDimension(dimension)
-	return &rk, nil
 }

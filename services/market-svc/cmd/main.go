@@ -10,10 +10,16 @@ import (
 
 	"github.com/truthmarket/truth-market/infra/postgres"
 	infraredis "github.com/truthmarket/truth-market/infra/redis"
+	"github.com/truthmarket/truth-market/pkg/domain"
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
+	"github.com/truthmarket/truth-market/pkg/repository"
+	marketv1 "github.com/truthmarket/truth-market/proto/gen/go/market/v1"
+	tradingv1 "github.com/truthmarket/truth-market/proto/gen/go/trading/v1"
 	"github.com/truthmarket/truth-market/services/market-svc/internal/config"
+	marketgrpc "github.com/truthmarket/truth-market/services/market-svc/internal/grpc"
+	"github.com/truthmarket/truth-market/services/market-svc/internal/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -80,12 +86,35 @@ func main() {
 	}
 	defer tradingConn.Close()
 
-	// pool, rdb, tradingConn will be used once repos and services are wired.
-	_ = pool
-	_ = rdb
-	_ = tradingConn
+	// ---------- Repositories ----------
+	marketRepo := postgres.NewMarketRepo(pool)
+	outcomeRepo := postgres.NewOutcomeRepo(pool)
+	positionRepo := postgres.NewPositionRepo(pool)
+	userRepo := postgres.NewUserRepo(pool)
+	txManager := postgres.NewTxManager(pool)
+
+	// ---------- Event Bus (Redis Pub/Sub) ----------
+	eventBus := infraredis.NewEventBus(rdb)
+	defer func() {
+		if err := eventBus.Close(); err != nil {
+			log.Error("event bus close error", "error", err)
+		}
+	}()
+
+	// ---------- Trading service client (order canceller) ----------
+	tradingClient := tradingv1.NewTradingServiceClient(tradingConn)
+	orderCanceller := &tradingOrderCanceller{client: tradingClient}
+
+	// ---------- Domain Services ----------
+	marketService := service.NewMarketService(marketRepo, outcomeRepo, txManager)
+	_ = service.NewSettlementService(
+		marketRepo, outcomeRepo, positionRepo, userRepo,
+		orderCanceller, txManager, eventBus,
+	)
 
 	// ---------- gRPC Server ----------
+	marketServer := marketgrpc.NewMarketServer(&marketServiceAdapter{svc: marketService})
+
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelmw.GRPCServerHandler()),
 	)
@@ -95,7 +124,8 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthSrv)
 	healthSrv.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	// TODO: Register market service RPCs here.
+	// Register market service RPCs.
+	marketv1.RegisterMarketServiceServer(grpcServer, marketServer)
 
 	// ---------- Listen ----------
 	lis, err := net.Listen("tcp", ":"+cfg.Port)
@@ -117,4 +147,54 @@ func main() {
 	log.Info("shutting down market-svc")
 	grpcServer.GracefulStop()
 	log.Info("market-svc stopped")
+}
+
+// tradingOrderCanceller adapts the trading gRPC client to the
+// service.OrderCanceller interface required by SettlementService.
+type tradingOrderCanceller struct {
+	client tradingv1.TradingServiceClient
+}
+
+func (c *tradingOrderCanceller) CancelAllOrdersByMarket(ctx context.Context, marketID string) (int64, error) {
+	resp, err := c.client.CancelAllOrdersByMarket(ctx, &tradingv1.CancelAllOrdersByMarketRequest{
+		MarketId: marketID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetCancelledCount(), nil
+}
+
+// marketServiceAdapter bridges service.MarketService to the
+// grpc.MarketServicer interface by converting the CreateMarketRequest type.
+type marketServiceAdapter struct {
+	svc *service.MarketService
+}
+
+func (a *marketServiceAdapter) CreateMarket(ctx context.Context, req marketgrpc.CreateMarketRequest) (*domain.Market, error) {
+	return a.svc.CreateMarket(ctx, service.CreateMarketRequest{
+		Title:         req.Title,
+		Description:   req.Description,
+		MarketType:    req.MarketType,
+		Category:      req.Category,
+		OutcomeLabels: req.OutcomeLabels,
+		EndTime:       req.EndTime,
+		CreatedBy:     req.CreatedBy,
+	})
+}
+
+func (a *marketServiceAdapter) GetMarket(ctx context.Context, id string) (*domain.Market, []*domain.Outcome, error) {
+	return a.svc.GetMarket(ctx, id)
+}
+
+func (a *marketServiceAdapter) ListMarkets(ctx context.Context, filter repository.MarketFilter) ([]*domain.Market, int64, error) {
+	return a.svc.ListMarkets(ctx, filter)
+}
+
+func (a *marketServiceAdapter) UpdateMarketStatus(ctx context.Context, id string, status domain.MarketStatus) error {
+	return a.svc.UpdateMarketStatus(ctx, id, status)
+}
+
+func (a *marketServiceAdapter) ResolveMarket(ctx context.Context, marketID, winningOutcomeID string) error {
+	return a.svc.ResolveMarket(ctx, marketID, winningOutcomeID)
 }

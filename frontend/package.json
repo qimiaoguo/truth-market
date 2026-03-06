@@ -13,10 +13,14 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.62.0",
+    "@reown/appkit": "^1.8.19",
+    "@reown/appkit-adapter-wagmi": "^1.8.19",
+    "@tanstack/react-query": "^5.90.21",
     "next": "15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "viem": "^2.47.0",
+    "wagmi": "^3.5.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

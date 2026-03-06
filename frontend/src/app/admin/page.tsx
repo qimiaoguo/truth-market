@@ -15,7 +15,7 @@ export default function AdminPage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (!isAuthenticated || !user?.isAdmin) {
+    if (!isAuthenticated || !user?.is_admin) {
       router.push('/')
     }
   }, [isAuthenticated, user, router])
@@ -42,7 +42,7 @@ export default function AdminPage() {
       const res = await api.listMarkets({ status: 'closed' })
       return res.data?.markets ?? []
     },
-    enabled: !!user?.isAdmin,
+    enabled: !!user?.is_admin,
   })
 
   // Create market mutation
@@ -103,7 +103,7 @@ export default function AdminPage() {
   }
 
   // Don't render if not admin
-  if (!user?.isAdmin) {
+  if (!user?.is_admin) {
     return null
   }
 

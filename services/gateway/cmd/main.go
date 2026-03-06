@@ -10,13 +10,18 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
-	"github.com/truthmarket/truth-market/services/gateway/internal/middleware"
 	infraredis "github.com/truthmarket/truth-market/infra/redis"
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
+	authv1 "github.com/truthmarket/truth-market/proto/gen/go/auth/v1"
+	marketv1 "github.com/truthmarket/truth-market/proto/gen/go/market/v1"
+	rankingv1 "github.com/truthmarket/truth-market/proto/gen/go/ranking/v1"
+	tradingv1 "github.com/truthmarket/truth-market/proto/gen/go/trading/v1"
 	"github.com/truthmarket/truth-market/services/gateway/internal"
 	"github.com/truthmarket/truth-market/services/gateway/internal/config"
+	"github.com/truthmarket/truth-market/services/gateway/internal/handler"
+	"github.com/truthmarket/truth-market/services/gateway/internal/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -89,11 +94,21 @@ func main() {
 	}
 	defer rankingConn.Close()
 
-	// Connections will be used once service-specific gRPC clients are wired.
-	_ = authConn
-	_ = marketConn
-	_ = tradingConn
-	_ = rankingConn
+	// ---------- gRPC service clients ----------
+	authClient := authv1.NewAuthServiceClient(authConn)
+	marketClient := marketv1.NewMarketServiceClient(marketConn)
+	tradingClient := tradingv1.NewTradingServiceClient(tradingConn)
+	rankingClient := rankingv1.NewRankingServiceClient(rankingConn)
+
+	// ---------- HTTP handlers ----------
+	authHandler := handler.NewAuthHandler(authClient)
+	marketHandler := handler.NewMarketHandler(marketClient)
+	orderHandler := handler.NewOrderHandler(tradingClient)
+	rankingHandler := handler.NewRankingHandler(rankingClient)
+	adminHandler := handler.NewAdminHandler(marketClient, authClient)
+
+	// ---------- Auth middleware ----------
+	authMW := middleware.AuthMiddleware(authClient)
 
 	// ---------- Redis rate limiter ----------
 	var rateLimiter middleware.RateLimiter
@@ -115,7 +130,7 @@ func main() {
 	}
 
 	// ---------- HTTP Router ----------
-	router := internal.SetupRouter(serviceName, rateLimiter)
+	router := internal.SetupRouter(serviceName, rateLimiter, authHandler, marketHandler, orderHandler, rankingHandler, adminHandler, authMW)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

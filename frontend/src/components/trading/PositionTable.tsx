@@ -40,16 +40,16 @@ export function PositionTable() {
               data-testid="position-row"
               className="border-b border-gray-800 text-gray-200 hover:bg-gray-800/50 transition-colors"
             >
-              <td className="px-4 py-3 font-medium">{position.marketId}</td>
-              <td className="px-4 py-3">{position.outcomeId}</td>
+              <td className="px-4 py-3 font-medium">{position.market_id}</td>
+              <td className="px-4 py-3">{position.outcome_id}</td>
               <td className="px-4 py-3 text-right tabular-nums">
                 {position.quantity}
               </td>
               <td className="px-4 py-3 text-right tabular-nums">
-                {position.avgPrice}
+                {position.avg_price}
               </td>
               <td className="px-4 py-3 text-right tabular-nums">
-                {position.currentValue ?? '-'}
+                {position.current_value ?? '-'}
               </td>
             </tr>
           ))}

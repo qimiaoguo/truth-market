@@ -56,7 +56,7 @@ export function OrderTable() {
               key={order.id}
               className="border-b border-gray-800 text-gray-200 hover:bg-gray-800/50 transition-colors"
             >
-              <td className="px-4 py-3 font-medium">{order.marketId}</td>
+              <td className="px-4 py-3 font-medium">{order.market_id}</td>
               <td className="px-4 py-3">
                 <span
                   className={
@@ -75,7 +75,7 @@ export function OrderTable() {
                 {order.quantity}
               </td>
               <td className="px-4 py-3 text-right tabular-nums">
-                {order.filledQuantity}
+                {order.filled_quantity}
               </td>
               <td className="px-4 py-3">
                 <span className="rounded-full bg-gray-700 px-2 py-0.5 text-xs text-gray-300">

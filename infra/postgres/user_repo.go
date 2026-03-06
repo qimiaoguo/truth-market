@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 	"github.com/truthmarket/truth-market/pkg/domain"
+	apperrors "github.com/truthmarket/truth-market/pkg/errors"
 	"github.com/truthmarket/truth-market/pkg/repository"
 )
 
@@ -55,6 +57,9 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*domain.User, error)
 
 	u, err := scanUser(row)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.New("NOT_FOUND", fmt.Sprintf("user not found: %s", id))
+		}
 		return nil, fmt.Errorf("postgres: get user by id: %w", err)
 	}
 
@@ -70,6 +75,9 @@ func (r *UserRepo) GetByWallet(ctx context.Context, addr string) (*domain.User, 
 
 	u, err := scanUser(row)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperrors.New("NOT_FOUND", fmt.Sprintf("user not found: %s", addr))
+		}
 		return nil, fmt.Errorf("postgres: get user by wallet: %w", err)
 	}
 

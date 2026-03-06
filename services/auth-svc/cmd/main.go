@@ -13,7 +13,10 @@ import (
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
+	authv1 "github.com/truthmarket/truth-market/proto/gen/go/auth/v1"
 	"github.com/truthmarket/truth-market/services/auth-svc/internal/config"
+	authgrpc "github.com/truthmarket/truth-market/services/auth-svc/internal/grpc"
+	"github.com/truthmarket/truth-market/services/auth-svc/internal/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -68,9 +71,14 @@ func main() {
 		}
 	}()
 
-	// pool and rdb will be used once repos and services are wired.
-	_ = pool
-	_ = rdb
+	// ---------- Repos & Stores ----------
+	userRepo := postgres.NewUserRepo(pool)
+	apiKeyRepo := postgres.NewAPIKeyRepo(pool)
+	sessionStore := infraredis.NewSessionStore(rdb)
+
+	// ---------- Services ----------
+	authService := service.NewAuthService(userRepo, sessionStore, cfg.JWTSecret)
+	apiKeyService := service.NewAPIKeyService(apiKeyRepo, userRepo)
 
 	// ---------- gRPC Server ----------
 	grpcServer := grpc.NewServer(
@@ -82,7 +90,9 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthSrv)
 	healthSrv.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	// TODO: Register auth service RPCs here.
+	// Register auth service RPCs.
+	authServer := authgrpc.NewAuthServer(authService, apiKeyService)
+	authv1.RegisterAuthServiceServer(grpcServer, authServer)
 
 	// ---------- Listen ----------
 	lis, err := net.Listen("tcp", ":"+cfg.Port)

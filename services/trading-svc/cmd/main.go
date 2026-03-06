@@ -13,7 +13,11 @@ import (
 	"github.com/truthmarket/truth-market/pkg/logger"
 	"github.com/truthmarket/truth-market/pkg/otel"
 	otelmw "github.com/truthmarket/truth-market/pkg/otel/middleware"
+	tradingv1 "github.com/truthmarket/truth-market/proto/gen/go/trading/v1"
 	"github.com/truthmarket/truth-market/services/trading-svc/internal/config"
+	tradinggrpc "github.com/truthmarket/truth-market/services/trading-svc/internal/grpc"
+	"github.com/truthmarket/truth-market/services/trading-svc/internal/matching"
+	"github.com/truthmarket/truth-market/services/trading-svc/internal/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -68,11 +72,28 @@ func main() {
 		}
 	}()
 
-	// pool and rdb will be used once repos, matching engine, and services are wired.
-	_ = pool
-	_ = rdb
+	// ---------- Repositories ----------
+	orderRepo := postgres.NewOrderRepo(pool)
+	tradeRepo := postgres.NewTradeRepo(pool)
+	positionRepo := postgres.NewPositionRepo(pool)
+	userRepo := postgres.NewUserRepo(pool)
+	outcomeRepo := postgres.NewOutcomeRepo(pool)
+	txManager := postgres.NewTxManager(pool)
 
-	// TODO: Initialize matching engine here.
+	// ---------- Event Bus (Redis) ----------
+	eventBus := infraredis.NewEventBus(rdb)
+	defer func() {
+		if err := eventBus.Close(); err != nil {
+			log.Error("event bus close error", "error", err)
+		}
+	}()
+
+	// ---------- Matching Engine ----------
+	engine := matching.NewRegistry()
+
+	// ---------- Services ----------
+	orderSvc := service.NewOrderService(orderRepo, userRepo, positionRepo, tradeRepo, txManager, engine)
+	mintSvc := service.NewMintService(userRepo, outcomeRepo, positionRepo, tradeRepo, txManager)
 
 	// ---------- gRPC Server ----------
 	grpcServer := grpc.NewServer(
@@ -84,7 +105,15 @@ func main() {
 	healthpb.RegisterHealthServer(grpcServer, healthSrv)
 	healthSrv.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
-	// TODO: Register trading service RPCs here.
+	// Register trading service RPCs.
+	tradingSrv := tradinggrpc.NewTradingServer(
+		&orderServiceAdapter{svc: orderSvc},
+		mintSvc,
+		tradinggrpc.WithOrderbookProvider(engine),
+	)
+	tradingv1.RegisterTradingServiceServer(grpcServer, tradingSrv)
+
+	_ = eventBus // will be used for publishing trade/order events
 
 	// ---------- Listen ----------
 	lis, err := net.Listen("tcp", ":"+cfg.Port)

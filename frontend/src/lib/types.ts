@@ -1,83 +1,83 @@
 export interface User {
   id: string
-  walletAddress: string
-  displayName?: string
-  avatarUrl?: string
-  userType: 'human' | 'agent'
+  wallet_address: string
+  display_name?: string
+  avatar_url?: string
+  user_type: 'human' | 'agent'
   balance: string
-  lockedBalance: string
-  isAdmin: boolean
-  createdAt: string
+  locked_balance: string
+  is_admin: boolean
+  created_at: string
 }
 
 export interface Market {
   id: string
   title: string
   description: string
-  marketType: 'binary' | 'multi'
+  market_type: 'binary' | 'multi'
   category: string
   status: 'draft' | 'open' | 'closed' | 'resolved' | 'cancelled'
   outcomes: Outcome[]
-  createdBy: string
+  created_by: string
   volume: string
   liquidity: string
-  closesAt: string
-  createdAt: string
-  resolvedAt?: string
-  winningOutcomeId?: string
+  end_time: string
+  created_at: string
+  resolved_at?: string
+  winning_outcome_id?: string
 }
 
 export interface Outcome {
   id: string
-  marketId: string
+  market_id: string
   label: string
   index: number
   price: string
-  isWinner: boolean
+  is_winner: boolean
 }
 
 export interface Order {
   id: string
-  userId: string
-  marketId: string
-  outcomeId: string
+  user_id: string
+  market_id: string
+  outcome_id: string
   side: 'buy' | 'sell'
   price: string
   quantity: string
-  filledQuantity: string
+  filled_quantity: string
   status: 'open' | 'partially_filled' | 'filled' | 'cancelled'
-  createdAt: string
-  updatedAt: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Trade {
   id: string
-  marketId: string
-  outcomeId: string
-  makerOrderId: string
-  takerOrderId: string
-  makerUserId: string
-  takerUserId: string
+  market_id: string
+  outcome_id: string
+  maker_order_id: string
+  taker_order_id: string
+  maker_user_id: string
+  taker_user_id: string
   price: string
   quantity: string
-  createdAt: string
+  created_at: string
 }
 
 export interface Position {
   id: string
-  userId: string
-  marketId: string
-  outcomeId: string
+  user_id: string
+  market_id: string
+  outcome_id: string
   quantity: string
-  avgPrice: string
-  currentValue?: string
-  updatedAt: string
+  avg_price: string
+  current_value?: string
+  updated_at: string
 }
 
 export interface OrderbookLevel {
   price: string
   quantity: string
-  orderCount: number
+  order_count: number
 }
 
 export interface Orderbook {
@@ -88,25 +88,22 @@ export interface Orderbook {
 export type RankDimension = 'total_assets' | 'pnl' | 'volume' | 'win_rate' | 'trade_count'
 
 export interface UserRanking {
-  userId: string
-  walletAddress: string
-  userType: 'human' | 'agent'
+  user_id: string
+  wallet_address: string
+  user_type: 'human' | 'agent'
   dimension: RankDimension
   rank: number
   value: string
-  updatedAt: string
+  updated_at: string
 }
 
 export interface ApiResponse<T> {
   ok: boolean
   data?: T
-  error?: {
-    code: string
-    message: string
-  }
+  error?: string
   meta?: {
     page: number
-    perPage: number
+    per_page: number
     total: number
   }
 }

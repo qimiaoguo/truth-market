@@ -62,8 +62,8 @@ class ApiClient {
     return this.get<{ nonce: string }>(`/auth/nonce?wallet_address=${walletAddress}`)
   }
 
-  async verifySignature(message: string, signature: string) {
-    return this.post<{ token: string; user: User }>('/auth/verify', { message, signature })
+  async verifySignature(message: string, signature: string, walletAddress: string) {
+    return this.post<{ token: string; user: User }>('/auth/verify', { message, signature, wallet_address: walletAddress })
   }
 
   async getMe() {

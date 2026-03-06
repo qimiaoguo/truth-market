@@ -5,19 +5,21 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	authv1 "github.com/truthmarket/truth-market/proto/gen/go/auth/v1"
 	marketv1 "github.com/truthmarket/truth-market/proto/gen/go/market/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // AdminHandler handles HTTP requests for admin-only market management
-// endpoints and delegates to the market-svc via gRPC.
+// endpoints and delegates to the market-svc and auth-svc via gRPC.
 type AdminHandler struct {
 	marketClient marketv1.MarketServiceClient
+	authClient   authv1.AuthServiceClient
 }
 
-// NewAdminHandler creates a new AdminHandler with the given gRPC market client.
-func NewAdminHandler(marketClient marketv1.MarketServiceClient) *AdminHandler {
-	return &AdminHandler{marketClient: marketClient}
+// NewAdminHandler creates a new AdminHandler with the given gRPC clients.
+func NewAdminHandler(marketClient marketv1.MarketServiceClient, authClient authv1.AuthServiceClient) *AdminHandler {
+	return &AdminHandler{marketClient: marketClient, authClient: authClient}
 }
 
 // requireAdmin checks if the current user is an admin. Returns false and
@@ -171,5 +173,60 @@ func (h *AdminHandler) ResolveMarket(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"ok":   true,
 		"data": json.RawMessage(data),
+	})
+}
+
+// createAgentUserRequest is the expected JSON body for CreateAgentUser.
+type createAgentUserRequest struct {
+	WalletAddress string `json:"wallet_address"`
+}
+
+// CreateAgentUser handles POST /api/v1/admin/agent-users.
+// It creates a new agent (bot) user by calling auth-svc VerifySignature
+// with a system-generated identity.
+func (h *AdminHandler) CreateAgentUser(c *gin.Context) {
+	if !requireAdmin(c) {
+		return
+	}
+
+	var req createAgentUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errMsg := "invalid request body"
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	if req.WalletAddress == "" {
+		errMsg := "wallet_address is required"
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	// Use VerifySignature with an empty signature to register an agent user.
+	// The auth-svc is responsible for recognising this pattern and creating
+	// an agent-type user.
+	resp, err := h.authClient.VerifySignature(c.Request.Context(), &authv1.VerifySignatureRequest{
+		WalletAddress: req.WalletAddress,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	user := resp.GetUser()
+	c.JSON(http.StatusCreated, gin.H{
+		"ok": true,
+		"data": gin.H{
+			"id":             user.GetId(),
+			"wallet_address": user.GetWalletAddress(),
+			"user_type":      user.GetUserType().String(),
+			"token":          resp.GetToken(),
+		},
 	})
 }

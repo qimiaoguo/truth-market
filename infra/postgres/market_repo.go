@@ -29,7 +29,7 @@ func (r *MarketRepo) Create(ctx context.Context, market *domain.Market) error {
 
 	_, err := q.Exec(ctx,
 		`INSERT INTO markets (id, title, description, category, market_type, status,
-		     creator_id, resolved_outcome_id, created_at, updated_at, closes_at)
+		     created_by, resolved_outcome_id, created_at, updated_at, end_time)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		market.ID,
 		market.Title,
@@ -55,7 +55,7 @@ func (r *MarketRepo) GetByID(ctx context.Context, id string) (*domain.Market, er
 
 	row := q.QueryRow(ctx,
 		`SELECT id, title, description, category, market_type, status,
-		        creator_id, resolved_outcome_id, created_at, updated_at, closes_at
+		        created_by, resolved_outcome_id, created_at, updated_at, end_time
 		 FROM markets WHERE id = $1`, id)
 
 	m, err := scanMarket(row)
@@ -72,7 +72,7 @@ func (r *MarketRepo) Update(ctx context.Context, market *domain.Market) error {
 	tag, err := q.Exec(ctx,
 		`UPDATE markets SET
 			title = $1, description = $2, category = $3, market_type = $4, status = $5,
-			creator_id = $6, resolved_outcome_id = $7, updated_at = $8, closes_at = $9
+			created_by = $6, resolved_outcome_id = $7, updated_at = $8, end_time = $9
 		 WHERE id = $10`,
 		market.Title,
 		market.Description,
@@ -150,7 +150,7 @@ func (r *MarketRepo) List(ctx context.Context, filter repository.MarketFilter) (
 
 	dataSQL := fmt.Sprintf(
 		`SELECT id, title, description, category, market_type, status,
-		        creator_id, resolved_outcome_id, created_at, updated_at, closes_at
+		        created_by, resolved_outcome_id, created_at, updated_at, end_time
 		 FROM markets %s ORDER BY created_at DESC LIMIT %s OFFSET %s`,
 		where, limitPlaceholder, offsetPlaceholder)
 

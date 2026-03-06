@@ -26,7 +26,7 @@ export function MintModal({ marketId }: MintModalProps) {
         setMessage('Minted')
         setQuantity('')
       } else {
-        setMessage(res.error?.message || 'Failed to mint')
+        setMessage(res.error || 'Failed to mint')
       }
     } catch {
       // For demo/testing, show success even if API unavailable

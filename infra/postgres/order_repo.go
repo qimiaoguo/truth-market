@@ -29,7 +29,7 @@ func (r *OrderRepo) Create(ctx context.Context, order *domain.Order) error {
 
 	_, err := q.Exec(ctx,
 		`INSERT INTO orders (id, user_id, market_id, outcome_id, side, price, quantity,
-		     filled_qty, status, created_at, updated_at)
+		     filled_quantity, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		order.ID,
 		order.UserID,
@@ -55,7 +55,7 @@ func (r *OrderRepo) GetByID(ctx context.Context, id string) (*domain.Order, erro
 
 	row := q.QueryRow(ctx,
 		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_qty, status, created_at, updated_at
+		        filled_quantity, status, created_at, updated_at
 		 FROM orders WHERE id = $1`, id)
 
 	o, err := scanOrder(row)
@@ -70,7 +70,7 @@ func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, status domain.O
 	q := r.Querier(ctx)
 
 	tag, err := q.Exec(ctx,
-		`UPDATE orders SET status = $1, filled_qty = $2, updated_at = NOW() WHERE id = $3`,
+		`UPDATE orders SET status = $1, filled_quantity = $2, updated_at = NOW() WHERE id = $3`,
 		string(status), filled, id)
 	if err != nil {
 		return fmt.Errorf("postgres: update order status: %w", err)
@@ -88,7 +88,7 @@ func (r *OrderRepo) ListOpenByMarket(ctx context.Context, marketID string) ([]*d
 
 	rows, err := q.Query(ctx,
 		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_qty, status, created_at, updated_at
+		        filled_quantity, status, created_at, updated_at
 		 FROM orders
 		 WHERE market_id = $1 AND status IN ('open', 'partial')
 		 ORDER BY price DESC, created_at ASC`, marketID)
@@ -133,7 +133,7 @@ func (r *OrderRepo) ListByUser(ctx context.Context, userID string, limit, offset
 	// Data.
 	rows, err := q.Query(ctx,
 		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_qty, status, created_at, updated_at
+		        filled_quantity, status, created_at, updated_at
 		 FROM orders WHERE user_id = $1
 		 ORDER BY created_at DESC
 		 LIMIT $2 OFFSET $3`, userID, limit, offset)

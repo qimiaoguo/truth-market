@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	authv1 "github.com/truthmarket/truth-market/proto/gen/go/auth/v1"
@@ -194,6 +195,217 @@ func (h *OrderHandler) MintTokens(c *gin.Context) {
 	})
 }
 
+// CancelOrder handles DELETE /api/v1/trading/orders/:id.
+func (h *OrderHandler) CancelOrder(c *gin.Context) {
+	orderID := c.Param("id")
+
+	// Get the authenticated user from the context.
+	userVal, _ := c.Get("user")
+	user, ok := userVal.(*authv1.User)
+	if !ok || user == nil {
+		errMsg := "unauthorized"
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	resp, err := h.tradingClient.CancelOrder(c.Request.Context(), &tradingv1.CancelOrderRequest{
+		UserId:  user.GetId(),
+		OrderId: orderID,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	order := resp.GetOrder()
+	orderData := orderResponse{
+		ID:             order.GetId(),
+		UserID:         order.GetUserId(),
+		MarketID:       order.GetMarketId(),
+		OutcomeID:      order.GetOutcomeId(),
+		Side:           protoOrderSideToString(order.GetSide()),
+		Price:          order.GetPrice(),
+		Quantity:       order.GetQuantity(),
+		FilledQuantity: order.GetFilledQuantity(),
+		Status:         protoOrderStatusToString(order.GetStatus()),
+	}
+
+	data, _ := json.Marshal(orderData)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": json.RawMessage(data),
+	})
+}
+
+// ListOrders handles GET /api/v1/trading/orders.
+func (h *OrderHandler) ListOrders(c *gin.Context) {
+	// Get the authenticated user from the context.
+	userVal, _ := c.Get("user")
+	user, ok := userVal.(*authv1.User)
+	if !ok || user == nil {
+		errMsg := "unauthorized"
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	req := &tradingv1.ListOrdersRequest{
+		UserId: user.GetId(),
+	}
+
+	if mid := c.Query("market_id"); mid != "" {
+		req.MarketId = mid
+	}
+	if s := c.Query("status"); s != "" {
+		if v, ok := tradingv1.OrderStatus_value[s]; ok {
+			req.Status = tradingv1.OrderStatus(v)
+		}
+	}
+	if p := c.Query("page"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil {
+			req.Page = int32(v)
+		}
+	}
+	if pp := c.Query("per_page"); pp != "" {
+		if v, err := strconv.Atoi(pp); err == nil {
+			req.PerPage = int32(v)
+		}
+	}
+
+	resp, err := h.tradingClient.ListOrders(c.Request.Context(), req)
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	orders := make([]orderResponse, 0, len(resp.GetOrders()))
+	for _, o := range resp.GetOrders() {
+		orders = append(orders, orderResponse{
+			ID:             o.GetId(),
+			UserID:         o.GetUserId(),
+			MarketID:       o.GetMarketId(),
+			OutcomeID:      o.GetOutcomeId(),
+			Side:           protoOrderSideToString(o.GetSide()),
+			Price:          o.GetPrice(),
+			Quantity:       o.GetQuantity(),
+			FilledQuantity: o.GetFilledQuantity(),
+			Status:         protoOrderStatusToString(o.GetStatus()),
+		})
+	}
+
+	result := gin.H{
+		"orders": orders,
+		"total":  resp.GetTotal(),
+	}
+	data, _ := json.Marshal(result)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": json.RawMessage(data),
+	})
+}
+
+// GetPositions handles GET /api/v1/trading/positions.
+func (h *OrderHandler) GetPositions(c *gin.Context) {
+	// Get the authenticated user from the context.
+	userVal, _ := c.Get("user")
+	user, ok := userVal.(*authv1.User)
+	if !ok || user == nil {
+		errMsg := "unauthorized"
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	req := &tradingv1.GetPositionsRequest{
+		UserId: user.GetId(),
+	}
+
+	if mid := c.Query("market_id"); mid != "" {
+		req.MarketId = mid
+	}
+
+	resp, err := h.tradingClient.GetPositions(c.Request.Context(), req)
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	positions := make([]positionResponse, 0, len(resp.GetPositions()))
+	for _, p := range resp.GetPositions() {
+		positions = append(positions, positionResponse{
+			ID:        p.GetId(),
+			UserID:    p.GetUserId(),
+			MarketID:  p.GetMarketId(),
+			OutcomeID: p.GetOutcomeId(),
+			Quantity:  p.GetQuantity(),
+			AvgPrice:  p.GetAvgPrice(),
+		})
+	}
+
+	result := gin.H{
+		"positions": positions,
+	}
+	data, _ := json.Marshal(result)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": json.RawMessage(data),
+	})
+}
+
+// GetOrderbook handles GET /api/v1/markets/:id/orderbook.
+func (h *OrderHandler) GetOrderbook(c *gin.Context) {
+	marketID := c.Param("id")
+	outcomeID := c.Query("outcome_id")
+
+	resp, err := h.tradingClient.GetOrderbook(c.Request.Context(), &tradingv1.GetOrderbookRequest{
+		MarketId:  marketID,
+		OutcomeId: outcomeID,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	bids := make([]orderbookLevelResponse, 0, len(resp.GetBids()))
+	for _, b := range resp.GetBids() {
+		bids = append(bids, orderbookLevelResponse{
+			Price:      b.GetPrice(),
+			Quantity:   b.GetQuantity(),
+			OrderCount: b.GetOrderCount(),
+		})
+	}
+
+	asks := make([]orderbookLevelResponse, 0, len(resp.GetAsks()))
+	for _, a := range resp.GetAsks() {
+		asks = append(asks, orderbookLevelResponse{
+			Price:      a.GetPrice(),
+			Quantity:   a.GetQuantity(),
+			OrderCount: a.GetOrderCount(),
+		})
+	}
+
+	result := gin.H{
+		"bids": bids,
+		"asks": asks,
+	}
+	data, _ := json.Marshal(result)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": json.RawMessage(data),
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -225,6 +437,12 @@ type positionResponse struct {
 	OutcomeID string `json:"outcome_id"`
 	Quantity  string `json:"quantity"`
 	AvgPrice  string `json:"avg_price"`
+}
+
+type orderbookLevelResponse struct {
+	Price      string `json:"price"`
+	Quantity   string `json:"quantity"`
+	OrderCount int32  `json:"order_count"`
 }
 
 // protoOrderSideToString converts a proto OrderSide to a lowercase string.

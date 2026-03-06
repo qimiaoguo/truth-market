@@ -76,7 +76,7 @@ export default function RankingTable({ dimension, userType }: RankingTableProps)
         <tbody>
           {rankings.map((ranking) => (
             <tr
-              key={`${ranking.userId}-${ranking.dimension}`}
+              key={`${ranking.user_id}-${ranking.dimension}`}
               data-testid="ranking-row"
               className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
             >
@@ -96,17 +96,17 @@ export default function RankingTable({ dimension, userType }: RankingTableProps)
                 </span>
               </td>
               <td className="py-3 pr-4 font-mono text-sm">
-                {truncateAddress(ranking.walletAddress)}
+                {truncateAddress(ranking.wallet_address)}
               </td>
               <td className="py-3 pr-4">
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    ranking.userType === 'agent'
+                    ranking.user_type === 'agent'
                       ? 'bg-primary-100 text-primary-700'
                       : 'bg-success-100 text-success-700'
                   }`}
                 >
-                  {ranking.userType === 'agent' ? 'Agent' : 'Human'}
+                  {ranking.user_type === 'agent' ? 'Agent' : 'Human'}
                 </span>
               </td>
               <td className="py-3 pr-4 pl-4 text-right font-medium tabular-nums">

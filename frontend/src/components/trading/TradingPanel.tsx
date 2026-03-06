@@ -36,7 +36,7 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
         setPrice('')
         setQuantity('')
       } else {
-        setMessage(res.error?.message || 'Failed to place order')
+        setMessage(res.error || 'Failed to place order')
       }
     } catch {
       setMessage('Order placed')

@@ -11,10 +11,11 @@ Truth Market is a prediction market platform for humans and AI agents. Go + Next
 ### Build & Test (from repo root)
 ```bash
 make build              # Build all Go modules
-make test               # Unit tests (short mode, race detector)
-make test-all           # All tests including integration
-make test-infra         # Infra tests (requires Docker/testcontainers)
+make test               # Unit tests (short mode, no Docker needed)
+make test-integration   # Integration tests with real DB (testcontainers, needs Docker)
+make test-contract      # Contract tests — verify gRPC↔JSON field mapping correctness
 make test-bench         # Matching engine benchmarks
+make test-all           # All tests including integration
 make lint               # Full lint (Go + proto + OpenAPI)
 make ci                 # Simulate full CI pipeline (lint + test)
 ```
@@ -47,9 +48,25 @@ pnpm test:run           # Vitest single run
 pnpm test:e2e           # Playwright
 ```
 
-### Docker
+### Local Development (preferred for E2E verification)
 ```bash
-make docker-up          # Full dev stack (postgres, redis, otel, jaeger, prometheus)
+make dev                # Start infra containers + all Go services via `go run` (scripts/dev.sh)
+make dev-down           # Stop Go services + containers
+make dev-reset          # Wipe data volumes and start fresh
+make dev-destroy        # Stop everything and delete volumes
+```
+
+`make dev` starts Docker infra (postgres:5433, redis:6380, otel, jaeger, prometheus) then runs all 5 Go services locally with `go run`. No pre-compilation needed — `go run` compiles on the fly with latest code. Services auto-connect to dev infra. Press Ctrl+C to stop Go services (containers keep running).
+
+After `make dev`, verify at:
+- Gateway: `http://localhost:8080` (API: `/api/v1`)
+- Jaeger UI: `http://localhost:16686`
+- Prometheus: `http://localhost:9090`
+
+### Docker (full containerized stack)
+```bash
+make docker-up          # All services in Docker (builds Go binaries in containers)
+make docker-down        # Stop all containers
 make docker-test-up     # Test infra only (postgres:5433, redis:6380)
 ```
 
@@ -134,12 +151,20 @@ Gateway: `PORT` (8080), `AUTH_SVC_ADDR`, `MARKET_SVC_ADDR`, `TRADING_SVC_ADDR`, 
 
 1. **TDD is mandatory** — write test first, see it fail (RED), then implement (GREEN), then refactor. Never write implementation before the test.
 2. **All automated tests must pass** — run the relevant test suite, lint, and build. Fix any failures before proceeding.
-3. **End-to-end verification required** — after tests pass, start the actual services (`docker compose up -d --build`) and verify the feature works for real (curl API / open browser). Evidence required.
+3. **End-to-end verification required** — after tests pass, start services with `make dev` and verify the feature works for real (curl API / open browser). Use `make dev-down` to stop. Evidence required.
 
-### Workflow Documents
+### Workflow Documents — MANDATORY Reading
 
-Read the relevant document before starting work:
+**Before starting ANY task, determine your role and read the corresponding document. This is not optional.**
 
-- **`DEV_WORKFLOW.md`** — full development workflow: TDD phases, test scope decision table, test utilities reference, end-to-end verification steps, completion checklist. **Read this before starting any fix or feature.**
-- **`CODE_REVIEW.md`** — self-review checklist (architecture, error handling, concurrency, naming) and PR review checklist (scope, coverage, dependencies, performance). **Read this after completing implementation.**
-- **`SECURITY_REVIEW.md`** — comprehensive security audit: injection prevention, auth/authz, input validation, sensitive data, dependency security, Docker/gRPC/WebSocket security, rate limiting. **Read this when changes touch auth, data handling, APIs, or infrastructure.**
+| If the user asks to... | Your role | MUST read first |
+|---|---|---|
+| Fix a bug, add a feature, implement something | Developer | `DEV_WORKFLOW.md` |
+| Review code, review a PR, check implementation quality | Code Reviewer | `CODE_REVIEW.md` |
+| Audit security, check auth/input/data handling | Security Reviewer | `SECURITY_REVIEW.md` |
+
+**Rules:**
+- Read the document BEFORE writing any code or starting analysis
+- Follow the document's checklist and phases exactly
+- Multiple roles can apply (e.g., developer + security reviewer for auth changes) — read all applicable docs
+- "I already know the workflow" is not an excuse to skip reading — the document is the source of truth

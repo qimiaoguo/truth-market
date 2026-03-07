@@ -132,7 +132,12 @@ func (s *MarketServer) ListMarkets(ctx context.Context, req *marketv1.ListMarket
 
 	protoMarkets := make([]*marketv1.Market, len(markets))
 	for i, m := range markets {
-		protoMarkets[i] = domainMarketToProto(m, nil)
+		_, outcomes, err := s.marketService.GetMarket(ctx, m.ID)
+		if err != nil {
+			protoMarkets[i] = domainMarketToProto(m, nil)
+			continue
+		}
+		protoMarkets[i] = domainMarketToProto(m, outcomes)
 	}
 
 	return &marketv1.ListMarketsResponse{

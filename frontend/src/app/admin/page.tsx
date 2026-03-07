@@ -390,7 +390,7 @@ export default function AdminPage() {
                           Select winning outcome:
                         </p>
                         <div className="space-y-2 mb-4">
-                          {market.outcomes.map((outcome) => (
+                          {(market.outcomes ?? []).map((outcome) => (
                             <label
                               key={outcome.id}
                               className="flex items-center gap-2 cursor-pointer"

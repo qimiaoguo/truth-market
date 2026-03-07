@@ -254,6 +254,15 @@ func TestGRPC_ListMarkets_ReturnsPaginated(t *testing.T) {
 		return markets[:1], int64(5), nil
 	}
 
+	// GetMarket is called for each listed market to fetch outcomes.
+	env.marketSvc.getMarketFn = func(_ context.Context, id string) (*domain.Market, []*domain.Outcome, error) {
+		assert.Equal(t, "m-1", id)
+		return markets[0], []*domain.Outcome{
+			{ID: "o-yes", MarketID: "m-1", Label: "Yes", Index: 0},
+			{ID: "o-no", MarketID: "m-1", Label: "No", Index: 1},
+		}, nil
+	}
+
 	resp, err := env.client.ListMarkets(context.Background(), &marketv1.ListMarketsRequest{
 		Status:  marketv1.MarketStatus_MARKET_STATUS_OPEN,
 		Page:    1,
@@ -264,6 +273,12 @@ func TestGRPC_ListMarkets_ReturnsPaginated(t *testing.T) {
 	require.Len(t, resp.GetMarkets(), 1, "should return 1 market for page size 1")
 	assert.Equal(t, "m-1", resp.GetMarkets()[0].GetId())
 	assert.Equal(t, int64(5), resp.GetTotal(), "total should reflect all matching markets")
+
+	// Verify outcomes are included in listed markets.
+	protoOutcomes := resp.GetMarkets()[0].GetOutcomes()
+	require.Len(t, protoOutcomes, 2, "listed market should include outcomes")
+	assert.Equal(t, "Yes", protoOutcomes[0].GetLabel())
+	assert.Equal(t, "No", protoOutcomes[1].GetLabel())
 }
 
 func TestGRPC_ResolveMarket_Success(t *testing.T) {

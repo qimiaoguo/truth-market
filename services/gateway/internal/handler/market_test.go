@@ -165,19 +165,23 @@ func TestGetMarketHandler_ReturnsMarketDetail(t *testing.T) {
 	assert.True(t, resp.OK)
 
 	// Parse the data field to verify market detail with outcomes.
-	var data struct {
-		ID          string `json:"id"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Category    string `json:"category"`
-		Outcomes    []struct {
-			ID    string `json:"id"`
-			Label string `json:"label"`
-			Index int32  `json:"index"`
-		} `json:"outcomes"`
+	// The handler wraps the market under a "market" key.
+	var wrapper struct {
+		Market struct {
+			ID          string `json:"id"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Category    string `json:"category"`
+			Outcomes    []struct {
+				ID    string `json:"id"`
+				Label string `json:"label"`
+				Index int32  `json:"index"`
+			} `json:"outcomes"`
+		} `json:"market"`
 	}
-	err = json.Unmarshal(resp.Data, &data)
+	err = json.Unmarshal(resp.Data, &wrapper)
 	require.NoError(t, err)
+	data := wrapper.Market
 	assert.Equal(t, "market-1", data.ID)
 	assert.Equal(t, "Will BTC reach 100k?", data.Title)
 	assert.Equal(t, "Resolves YES if BTC price reaches $100,000 before end date.", data.Description)

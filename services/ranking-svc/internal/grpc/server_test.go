@@ -118,9 +118,9 @@ func TestGRPC_GetLeaderboard_ReturnsPaginated(t *testing.T) {
 
 	now := time.Now()
 	rankings := []*domain.UserRanking{
-		{UserID: "user-1", UserType: domain.UserTypeHuman, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(5000), Rank: 1, UpdatedAt: now},
-		{UserID: "user-2", UserType: domain.UserTypeHuman, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(4000), Rank: 2, UpdatedAt: now},
-		{UserID: "user-3", UserType: domain.UserTypeAgent, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(3000), Rank: 3, UpdatedAt: now},
+		{UserID: "user-1", WalletAddress: "0xAAA1", UserType: domain.UserTypeHuman, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(5000), Rank: 1, UpdatedAt: now},
+		{UserID: "user-2", WalletAddress: "0xAAA2", UserType: domain.UserTypeHuman, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(4000), Rank: 2, UpdatedAt: now},
+		{UserID: "user-3", WalletAddress: "0xAAA3", UserType: domain.UserTypeAgent, Dimension: domain.RankDimensionTotalAssets, Value: decimal.NewFromInt(3000), Rank: 3, UpdatedAt: now},
 	}
 
 	env.rankingSvc.getLeaderboardFn = func(_ context.Context, dimension domain.RankDimension, _ *domain.UserType, page, perPage int) ([]*domain.UserRanking, int64, error) {
@@ -142,6 +142,7 @@ func TestGRPC_GetLeaderboard_ReturnsPaginated(t *testing.T) {
 
 	first := resp.GetRankings()[0]
 	assert.Equal(t, "user-1", first.GetUserId())
+	assert.Equal(t, "0xAAA1", first.GetWalletAddress())
 	assert.Equal(t, int64(1), first.GetRank())
 	assert.Equal(t, "5000", first.GetValue())
 }

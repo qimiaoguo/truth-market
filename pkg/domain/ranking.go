@@ -30,10 +30,11 @@ func (d RankDimension) String() string {
 // UserRanking represents a user's rank on a specific leaderboard dimension.
 // Rankings are periodically recalculated and stored for efficient retrieval.
 type UserRanking struct {
-	UserID    string
-	UserType  UserType
-	Dimension RankDimension
-	Value     decimal.Decimal
-	Rank      int
-	UpdatedAt time.Time
+	UserID        string
+	WalletAddress string
+	UserType      UserType
+	Dimension     RankDimension
+	Value         decimal.Decimal
+	Rank          int
+	UpdatedAt     time.Time
 }

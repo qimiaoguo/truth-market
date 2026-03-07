@@ -74,7 +74,7 @@ func (r *RankingRepo) GetByUser(ctx context.Context, userID string) ([]*domain.U
 		col := dimensionColumn(dim)
 
 		sql := fmt.Sprintf(
-			`SELECT ur.user_id, ur.user_type, ur.%s, ur.updated_at, ranked.rank
+			`SELECT ur.user_id, ur.wallet_address, ur.user_type, ur.%s, ur.updated_at, ranked.rank
 			 FROM user_rankings ur
 			 JOIN (
 				SELECT user_id, RANK() OVER (ORDER BY %s DESC) AS rank
@@ -83,14 +83,15 @@ func (r *RankingRepo) GetByUser(ctx context.Context, userID string) ([]*domain.U
 			 WHERE ur.user_id = $1`, col, col)
 
 		var (
-			uid       string
-			userType  string
-			value     decimal.Decimal
-			updatedAt time.Time
-			rank      int
+			uid           string
+			walletAddress string
+			userType      string
+			value         decimal.Decimal
+			updatedAt     time.Time
+			rank          int
 		)
 
-		err := q.QueryRow(ctx, sql, userID).Scan(&uid, &userType, &value, &updatedAt, &rank)
+		err := q.QueryRow(ctx, sql, userID).Scan(&uid, &walletAddress, &userType, &value, &updatedAt, &rank)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				continue
@@ -99,12 +100,13 @@ func (r *RankingRepo) GetByUser(ctx context.Context, userID string) ([]*domain.U
 		}
 
 		rankings = append(rankings, &domain.UserRanking{
-			UserID:    uid,
-			UserType:  domain.UserType(userType),
-			Dimension: dim,
-			Value:     value,
-			Rank:      int(rank),
-			UpdatedAt: updatedAt,
+			UserID:        uid,
+			WalletAddress: walletAddress,
+			UserType:      domain.UserType(userType),
+			Dimension:     dim,
+			Value:         value,
+			Rank:          int(rank),
+			UpdatedAt:     updatedAt,
 		})
 	}
 
@@ -169,7 +171,7 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 	offsetPlaceholder := fmt.Sprintf("$%d", idx)
 
 	dataSQL := fmt.Sprintf(
-		`SELECT user_id, user_type, %s, updated_at,
+		`SELECT user_id, wallet_address, user_type, %s, updated_at,
 				RANK() OVER (ORDER BY %s DESC) AS rank
 		 FROM user_rankings %s
 		 ORDER BY rank ASC
@@ -185,24 +187,26 @@ func (r *RankingRepo) List(ctx context.Context, filter repository.RankingFilter)
 	var rankings []*domain.UserRanking
 	for rows.Next() {
 		var (
-			uid       string
-			userType  string
-			value     decimal.Decimal
-			updatedAt time.Time
-			rank      int
+			uid           string
+			walletAddress string
+			userType      string
+			value         decimal.Decimal
+			updatedAt     time.Time
+			rank          int
 		)
 
-		if err := rows.Scan(&uid, &userType, &value, &updatedAt, &rank); err != nil {
+		if err := rows.Scan(&uid, &walletAddress, &userType, &value, &updatedAt, &rank); err != nil {
 			return nil, 0, fmt.Errorf("postgres: list rankings scan: %w", err)
 		}
 
 		rankings = append(rankings, &domain.UserRanking{
-			UserID:    uid,
-			UserType:  domain.UserType(userType),
-			Dimension: dim,
-			Value:     value,
-			Rank:      rank,
-			UpdatedAt: updatedAt,
+			UserID:        uid,
+			WalletAddress: walletAddress,
+			UserType:      domain.UserType(userType),
+			Dimension:     dim,
+			Value:         value,
+			Rank:          rank,
+			UpdatedAt:     updatedAt,
 		})
 	}
 

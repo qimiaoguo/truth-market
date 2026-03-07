@@ -225,11 +225,12 @@ func domainRankingToProto(r *domain.UserRanking) *rankingv1.UserRanking {
 		return nil
 	}
 	return &rankingv1.UserRanking{
-		UserId:    r.UserID,
-		UserType:  string(r.UserType),
-		Rank:      int64(r.Rank),
-		Value:     r.Value.String(),
-		UpdatedAt: timestamppb.New(r.UpdatedAt),
+		UserId:        r.UserID,
+		WalletAddress: r.WalletAddress,
+		UserType:      string(r.UserType),
+		Rank:          int64(r.Rank),
+		Value:         r.Value.String(),
+		UpdatedAt:     timestamppb.New(r.UpdatedAt),
 	}
 }
 

@@ -36,18 +36,32 @@ type dimensionRankResponse struct {
 	Value     string `json:"value"`
 }
 
+// dimensionMap maps frontend-friendly dimension names to proto enums.
+var dimensionMap = map[string]rankingv1.RankDimension{
+	"total_assets": rankingv1.RankDimension_RANK_DIMENSION_TOTAL_ASSETS,
+	"pnl":          rankingv1.RankDimension_RANK_DIMENSION_PNL,
+	"volume":       rankingv1.RankDimension_RANK_DIMENSION_VOLUME,
+	"win_rate":     rankingv1.RankDimension_RANK_DIMENSION_WIN_RATE,
+}
+
+// userTypeFilterMap maps frontend-friendly user type names to proto enums.
+var userTypeFilterMap = map[string]rankingv1.UserTypeFilter{
+	"human": rankingv1.UserTypeFilter_USER_TYPE_FILTER_HUMAN,
+	"agent": rankingv1.UserTypeFilter_USER_TYPE_FILTER_AGENT,
+}
+
 // GetLeaderboard handles GET /api/v1/rankings.
 func (h *RankingHandler) GetLeaderboard(c *gin.Context) {
 	req := &rankingv1.GetLeaderboardRequest{}
 
 	if d := c.Query("dimension"); d != "" {
-		if v, ok := rankingv1.RankDimension_value[d]; ok {
-			req.Dimension = rankingv1.RankDimension(v)
+		if v, ok := dimensionMap[d]; ok {
+			req.Dimension = v
 		}
 	}
 	if ut := c.Query("user_type"); ut != "" {
-		if v, ok := rankingv1.UserTypeFilter_value[ut]; ok {
-			req.UserType = rankingv1.UserTypeFilter(v)
+		if v, ok := userTypeFilterMap[ut]; ok {
+			req.UserType = v
 		}
 	}
 	if p := c.Query("page"); p != "" {

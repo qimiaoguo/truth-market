@@ -161,21 +161,21 @@ func TestResolveMarketHandler_AdminOnly(t *testing.T) {
 }
 
 func TestResolveMarketHandler_ValidPayload(t *testing.T) {
-	mock := &mockMarketClient{
-		resolveMarketResp: &marketv1.ResolveMarketResponse{
-			Market: &marketv1.Market{
-				Id:         "market-1",
-				Title:      "Will BTC reach 100k?",
-				Category:   "crypto",
-				Status:     marketv1.MarketStatus_MARKET_STATUS_RESOLVED,
-				MarketType: marketv1.MarketType_MARKET_TYPE_BINARY,
-				CreatedBy:  "user-1",
-				Outcomes: []*marketv1.Outcome{
-					{Id: "outcome-1", MarketId: "market-1", Label: "Yes", Index: 0, IsWinner: true},
-					{Id: "outcome-2", MarketId: "market-1", Label: "No", Index: 1, IsWinner: false},
-				},
-			},
+	resolvedMarket := &marketv1.Market{
+		Id:         "market-1",
+		Title:      "Will BTC reach 100k?",
+		Category:   "crypto",
+		Status:     marketv1.MarketStatus_MARKET_STATUS_RESOLVED,
+		MarketType: marketv1.MarketType_MARKET_TYPE_BINARY,
+		CreatedBy:  "user-1",
+		Outcomes: []*marketv1.Outcome{
+			{Id: "outcome-1", MarketId: "market-1", Label: "Yes", Index: 0, IsWinner: true},
+			{Id: "outcome-2", MarketId: "market-1", Label: "No", Index: 1, IsWinner: false},
 		},
+	}
+	mock := &mockMarketClient{
+		resolveMarketResp: &marketv1.ResolveMarketResponse{Market: resolvedMarket},
+		getMarketResp:     &marketv1.GetMarketResponse{Market: resolvedMarket},
 	}
 	h := &AdminHandler{marketClient: mock}
 	router := setupAdminTestRouter(h, true, "admin-1")

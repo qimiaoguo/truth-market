@@ -85,6 +85,14 @@ func main() {
 	// into a caching layer; the constructor call above validates connectivity.
 	_ = rankingCache
 
+	// Refresh the materialized view on startup so rankings reflect
+	// any changes that occurred while the service was down.
+	if err := rankingRepo.RefreshMaterializedView(ctx); err != nil {
+		log.Warn("failed to refresh rankings on startup", "error", err)
+	} else {
+		log.Info("rankings materialized view refreshed on startup")
+	}
+
 	// ---------- gRPC Server ----------
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelmw.GRPCServerHandler()),

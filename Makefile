@@ -1,5 +1,5 @@
-.PHONY: all lint test test-all test-infra test-services test-pact test-bench \
-        test-trading-integration coverage proto openapi-lint openapi-bundle \
+.PHONY: all lint test test-all test-integration test-contract test-bench \
+        coverage proto openapi-lint openapi-bundle \
         docs-dev docker-up docker-down docker-test-up docker-test-down \
         dev dev-down dev-reset migrate ci clean build
 
@@ -67,31 +67,22 @@ test-all:
 		(cd $$mod && go test ./... -v -race -count=1) || exit 1; \
 	done
 
-test-infra:
-	@echo "==> Running infra tests (requires Docker)..."
+test-integration:
+	@echo "==> Running integration tests (requires Docker)..."
+	@echo "  Testing infra..."
 	@(cd infra && go test ./... -v -race -count=1)
-
-test-services:
-	@echo "==> Running service tests..."
-	@for svc in gateway auth-svc market-svc trading-svc ranking-svc; do \
-		echo "  Testing $$svc..."; \
-		(cd services/$$svc && go test ./... -v -race -short -count=1) || exit 1; \
+	@for svc in auth-svc market-svc trading-svc ranking-svc; do \
+		echo "  Integration testing $$svc..."; \
+		(cd services/$$svc && go test ./... -v -race -count=1 -run TestIntegration) || exit 1; \
 	done
 
-test-pact:
-	@echo "==> Running Pact contract tests..."
-	@for svc in gateway auth-svc market-svc trading-svc ranking-svc; do \
-		echo "  Pact testing $$svc..."; \
-		(cd services/$$svc && go test ./... -v -tags=pact -count=1) || exit 1; \
-	done
+test-contract:
+	@echo "==> Running contract tests (gateway ↔ gRPC field mapping)..."
+	@(cd services/gateway && go test ./internal/handler/ -v -count=1 -run TestContract)
 
 test-bench:
 	@echo "==> Running benchmark tests..."
 	@(cd services/trading-svc && go test ./internal/matching/... -bench=. -benchmem -run=^$$)
-
-test-trading-integration:
-	@echo "==> Running trading integration tests (requires Docker)..."
-	@(cd services/trading-svc && go test ./internal/service/ -v -race -count=1 -run TestIntegration)
 
 # ──────────────────────────────────────────────────
 # Coverage

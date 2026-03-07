@@ -105,7 +105,7 @@ func main() {
 	marketHandler := handler.NewMarketHandler(marketClient)
 	orderHandler := handler.NewOrderHandler(tradingClient)
 	rankingHandler := handler.NewRankingHandler(rankingClient)
-	adminHandler := handler.NewAdminHandler(marketClient, authClient)
+	adminHandler := handler.NewAdminHandler(marketClient, authClient, rankingClient)
 
 	// ---------- Auth middleware ----------
 	authMW := middleware.AuthMiddleware(authClient)

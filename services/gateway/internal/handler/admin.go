@@ -7,19 +7,21 @@ import (
 	"github.com/gin-gonic/gin"
 	authv1 "github.com/truthmarket/truth-market/proto/gen/go/auth/v1"
 	marketv1 "github.com/truthmarket/truth-market/proto/gen/go/market/v1"
+	rankingv1 "github.com/truthmarket/truth-market/proto/gen/go/ranking/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // AdminHandler handles HTTP requests for admin-only market management
 // endpoints and delegates to the market-svc and auth-svc via gRPC.
 type AdminHandler struct {
-	marketClient marketv1.MarketServiceClient
-	authClient   authv1.AuthServiceClient
+	marketClient  marketv1.MarketServiceClient
+	authClient    authv1.AuthServiceClient
+	rankingClient rankingv1.RankingServiceClient
 }
 
 // NewAdminHandler creates a new AdminHandler with the given gRPC clients.
-func NewAdminHandler(marketClient marketv1.MarketServiceClient, authClient authv1.AuthServiceClient) *AdminHandler {
-	return &AdminHandler{marketClient: marketClient, authClient: authClient}
+func NewAdminHandler(marketClient marketv1.MarketServiceClient, authClient authv1.AuthServiceClient, rankingClient rankingv1.RankingServiceClient) *AdminHandler {
+	return &AdminHandler{marketClient: marketClient, authClient: authClient, rankingClient: rankingClient}
 }
 
 // requireAdmin checks if the current user is an admin. Returns false and
@@ -303,5 +305,23 @@ func (h *AdminHandler) CreateAgentUser(c *gin.Context) {
 			"user_type":      user.GetUserType().String(),
 			"token":          resp.GetToken(),
 		},
+	})
+}
+
+// RefreshRankings handles POST /api/v1/admin/rankings/refresh.
+func (h *AdminHandler) RefreshRankings(c *gin.Context) {
+	if !requireAdmin(c) {
+		return
+	}
+
+	_, err := h.rankingClient.RefreshRankings(c.Request.Context(), &rankingv1.RefreshRankingsRequest{})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": gin.H{"message": "rankings refreshed"},
 	})
 }

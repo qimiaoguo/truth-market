@@ -120,6 +120,7 @@ func SetupRouter(
 			admin.POST("/markets/:id/status", adminHandler.UpdateMarketStatus)
 			admin.POST("/markets/:id/resolve", adminHandler.ResolveMarket)
 			admin.POST("/agent-users", adminHandler.CreateAgentUser)
+			admin.POST("/rankings/refresh", adminHandler.RefreshRankings)
 		}
 	}
 

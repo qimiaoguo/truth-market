@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/truthmarket/truth-market/infra/postgres/sqlcgen"
 	"github.com/truthmarket/truth-market/pkg/domain"
 	"github.com/truthmarket/truth-market/pkg/repository"
 )
@@ -24,121 +25,69 @@ func NewAPIKeyRepo(pool *pgxpool.Pool) *APIKeyRepo {
 var _ repository.APIKeyRepository = (*APIKeyRepo)(nil)
 
 func (r *APIKeyRepo) Create(ctx context.Context, key *domain.APIKey) error {
-	q := r.Querier(ctx)
-
-	_, err := q.Exec(ctx,
-		`INSERT INTO api_keys (id, user_id, key_hash, key_prefix, is_active, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		key.ID,
-		key.UserID,
-		key.KeyHash,
-		key.KeyPrefix,
-		key.IsActive,
-		key.ExpiresAt,
-		key.CreatedAt,
-	)
+	err := r.Q(ctx).CreateAPIKey(ctx, sqlcgen.CreateAPIKeyParams{
+		ID:        key.ID,
+		UserID:    key.UserID,
+		KeyHash:   key.KeyHash,
+		KeyPrefix: key.KeyPrefix,
+		IsActive:  key.IsActive,
+		ExpiresAt: tstzFromOptional(key.ExpiresAt),
+		CreatedAt: tstz(key.CreatedAt),
+	})
 	if err != nil {
 		return fmt.Errorf("postgres: create api key: %w", err)
 	}
-
 	return nil
 }
 
 func (r *APIKeyRepo) GetByHash(ctx context.Context, hash string) (*domain.APIKey, error) {
-	q := r.Querier(ctx)
-
-	row := q.QueryRow(ctx,
-		`SELECT id, user_id, key_hash, key_prefix, is_active, expires_at, created_at
-		 FROM api_keys WHERE key_hash = $1`, hash)
-
-	k, err := scanAPIKey(row)
+	row, err := r.Q(ctx).GetAPIKeyByHash(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: get api key by hash: %w", err)
 	}
-
-	return k, nil
+	return apikeyFromRow(row), nil
 }
 
 func (r *APIKeyRepo) ListByUser(ctx context.Context, userID string) ([]*domain.APIKey, error) {
-	q := r.Querier(ctx)
-
-	rows, err := q.Query(ctx,
-		`SELECT id, user_id, key_hash, key_prefix, is_active, expires_at, created_at
-		 FROM api_keys WHERE user_id = $1
-		 ORDER BY created_at DESC`, userID)
+	rows, err := r.Q(ctx).ListAPIKeysByUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list api keys by user: %w", err)
 	}
-	defer rows.Close()
 
-	var keys []*domain.APIKey
-	for rows.Next() {
-		k, err := scanAPIKeyFromRows(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: list api keys scan: %w", err)
+	keys := make([]*domain.APIKey, len(rows))
+	for i, row := range rows {
+		keys[i] = &domain.APIKey{
+			ID:        row.ID,
+			UserID:    row.UserID,
+			KeyHash:   row.KeyHash,
+			KeyPrefix: row.KeyPrefix,
+			IsActive:  row.IsActive,
+			ExpiresAt: optionalTimeFromTstz(row.ExpiresAt),
+			CreatedAt: row.CreatedAt.Time,
 		}
-		keys = append(keys, k)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postgres: list api keys rows: %w", err)
-	}
-
 	return keys, nil
 }
 
 func (r *APIKeyRepo) Revoke(ctx context.Context, id string) error {
-	q := r.Querier(ctx)
-
-	tag, err := q.Exec(ctx,
-		`UPDATE api_keys SET is_active = false WHERE id = $1`, id)
+	n, err := r.Q(ctx).RevokeAPIKey(ctx, id)
 	if err != nil {
 		return fmt.Errorf("postgres: revoke api key: %w", err)
 	}
-
-	if tag.RowsAffected() == 0 {
+	if n == 0 {
 		return fmt.Errorf("postgres: revoke api key: %w", pgx.ErrNoRows)
 	}
-
 	return nil
 }
 
-// scanAPIKey scans a single API key from pgx.Row.
-func scanAPIKey(row pgx.Row) (*domain.APIKey, error) {
-	var k domain.APIKey
-
-	err := row.Scan(
-		&k.ID,
-		&k.UserID,
-		&k.KeyHash,
-		&k.KeyPrefix,
-		&k.IsActive,
-		&k.ExpiresAt,
-		&k.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
+func apikeyFromRow(r sqlcgen.GetAPIKeyByHashRow) *domain.APIKey {
+	return &domain.APIKey{
+		ID:        r.ID,
+		UserID:    r.UserID,
+		KeyHash:   r.KeyHash,
+		KeyPrefix: r.KeyPrefix,
+		IsActive:  r.IsActive,
+		ExpiresAt: optionalTimeFromTstz(r.ExpiresAt),
+		CreatedAt: r.CreatedAt.Time,
 	}
-
-	return &k, nil
-}
-
-// scanAPIKeyFromRows scans a single API key from pgx.Rows.
-func scanAPIKeyFromRows(rows pgx.Rows) (*domain.APIKey, error) {
-	var k domain.APIKey
-
-	err := rows.Scan(
-		&k.ID,
-		&k.UserID,
-		&k.KeyHash,
-		&k.KeyPrefix,
-		&k.IsActive,
-		&k.ExpiresAt,
-		&k.CreatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &k, nil
 }

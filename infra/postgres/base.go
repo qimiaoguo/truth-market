@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/truthmarket/truth-market/infra/postgres/sqlcgen"
 )
 
 // Querier abstracts pgxpool.Pool and pgx.Tx so that repository methods can
@@ -31,4 +32,14 @@ func (r *BaseRepo) Querier(ctx context.Context) Querier {
 		return tx
 	}
 	return r.pool
+}
+
+// Q returns a sqlcgen.Queries instance backed by the current transaction (if
+// any) or the connection pool. Both pgxpool.Pool and pgx.Tx implement the
+// sqlcgen.DBTX interface (including CopyFrom), so this works transparently.
+func (r *BaseRepo) Q(ctx context.Context) *sqlcgen.Queries {
+	if tx, ok := txFromCtx(ctx); ok {
+		return sqlcgen.New(tx)
+	}
+	return sqlcgen.New(r.pool)
 }

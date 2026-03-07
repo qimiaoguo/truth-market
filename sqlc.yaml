@@ -1,0 +1,25 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "infra/postgres/queries"
+    schema: "migrations"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "infra/postgres/sqlcgen"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_empty_slices: true
+        overrides:
+          - db_type: "numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+          - db_type: "pg_catalog.numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+          - db_type: "uuid"
+            go_type: "string"
+          - db_type: "pg_catalog.int8"
+            go_type: "int64"

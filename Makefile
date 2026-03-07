@@ -1,7 +1,7 @@
 .PHONY: all lint test test-all test-integration test-contract test-bench \
         coverage proto openapi-lint openapi-bundle \
         docs-dev docker-up docker-down docker-test-up docker-test-down \
-        dev dev-down dev-reset migrate ci clean build
+        dev dev-down dev-reset migrate ci clean build sqlc sqlc-check
 
 # Variables
 MODULES = pkg infra services/gateway services/auth-svc services/market-svc services/trading-svc services/ranking-svc
@@ -111,6 +111,18 @@ proto:
 	@(cd $(PROTO_DIR) && buf generate)
 	@echo "==> Done."
 
+# ──────────────────────────────────────────────────
+# sqlc
+# ──────────────────────────────────────────────────
+
+sqlc:
+	@echo "==> Generating sqlc code..."
+	@sqlc generate
+
+sqlc-check:
+	@echo "==> Checking sqlc queries against schema..."
+	@sqlc diff
+
 proto-breaking:
 	@echo "==> Checking protobuf breaking changes..."
 	@(cd $(PROTO_DIR) && buf breaking --against '.git#branch=main')
@@ -167,12 +179,12 @@ dev-reset:
 
 dev-down:
 	@docker compose -f docker-compose.dev.yml down
-	@pkill -f "go run.*truth-market" 2>/dev/null || true
+	@pkill -f "go run \./services/" 2>/dev/null || true
 	@echo "==> Dev environment stopped (data preserved in volume)."
 
 dev-destroy:
 	@docker compose -f docker-compose.dev.yml down -v
-	@pkill -f "go run.*truth-market" 2>/dev/null || true
+	@pkill -f "go run \./services/" 2>/dev/null || true
 	@echo "==> Dev environment destroyed (volumes removed)."
 
 # ──────────────────────────────────────────────────

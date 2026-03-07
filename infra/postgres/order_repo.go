@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
+	"github.com/truthmarket/truth-market/infra/postgres/sqlcgen"
 	"github.com/truthmarket/truth-market/pkg/domain"
 	"github.com/truthmarket/truth-market/pkg/repository"
 )
@@ -25,127 +26,65 @@ func NewOrderRepo(pool *pgxpool.Pool) *OrderRepo {
 var _ repository.OrderRepository = (*OrderRepo)(nil)
 
 func (r *OrderRepo) Create(ctx context.Context, order *domain.Order) error {
-	q := r.Querier(ctx)
-
-	_, err := q.Exec(ctx,
-		`INSERT INTO orders (id, user_id, market_id, outcome_id, side, price, quantity,
-		     filled_quantity, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		order.ID,
-		order.UserID,
-		order.MarketID,
-		order.OutcomeID,
-		string(order.Side),
-		order.Price,
-		order.Quantity,
-		order.FilledQty,
-		string(order.Status),
-		order.CreatedAt,
-		order.UpdatedAt,
-	)
+	err := r.Q(ctx).CreateOrder(ctx, sqlcgen.CreateOrderParams{
+		ID:             order.ID,
+		UserID:         order.UserID,
+		MarketID:       order.MarketID,
+		OutcomeID:      order.OutcomeID,
+		Side:           string(order.Side),
+		Price:          order.Price,
+		Quantity:       order.Quantity,
+		FilledQuantity: order.FilledQty,
+		Status:         string(order.Status),
+		CreatedAt:      tstz(order.CreatedAt),
+		UpdatedAt:      tstz(order.UpdatedAt),
+	})
 	if err != nil {
 		return fmt.Errorf("postgres: create order: %w", err)
 	}
-
 	return nil
 }
 
 func (r *OrderRepo) GetByID(ctx context.Context, id string) (*domain.Order, error) {
-	q := r.Querier(ctx)
-
-	row := q.QueryRow(ctx,
-		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_quantity, status, created_at, updated_at
-		 FROM orders WHERE id = $1`, id)
-
-	o, err := scanOrder(row)
+	row, err := r.Q(ctx).GetOrderByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: get order by id: %w", err)
 	}
-
-	return o, nil
+	return orderFromModel(row), nil
 }
 
 func (r *OrderRepo) UpdateStatus(ctx context.Context, id string, status domain.OrderStatus, filled decimal.Decimal) error {
-	q := r.Querier(ctx)
-
-	tag, err := q.Exec(ctx,
-		`UPDATE orders SET status = $1, filled_quantity = $2, updated_at = NOW() WHERE id = $3`,
-		string(status), filled, id)
+	n, err := r.Q(ctx).UpdateOrderStatus(ctx, sqlcgen.UpdateOrderStatusParams{
+		Status:         string(status),
+		FilledQuantity: filled,
+		ID:             id,
+	})
 	if err != nil {
 		return fmt.Errorf("postgres: update order status: %w", err)
 	}
-
-	if tag.RowsAffected() == 0 {
+	if n == 0 {
 		return fmt.Errorf("postgres: update order status: %w", pgx.ErrNoRows)
 	}
-
 	return nil
 }
 
 func (r *OrderRepo) ListOpenByMarket(ctx context.Context, marketID string) ([]*domain.Order, error) {
-	q := r.Querier(ctx)
-
-	rows, err := q.Query(ctx,
-		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_quantity, status, created_at, updated_at
-		 FROM orders
-		 WHERE market_id = $1 AND status IN ('open', 'partially_filled')
-		 ORDER BY price DESC, created_at ASC`, marketID)
+	rows, err := r.Q(ctx).ListOpenOrdersByMarket(ctx, marketID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list open orders by market: %w", err)
 	}
-	defer rows.Close()
-
-	var orders []*domain.Order
-	for rows.Next() {
-		o, err := scanOrderFromRows(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: list open orders scan: %w", err)
-		}
-		orders = append(orders, o)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postgres: list open orders rows: %w", err)
-	}
-
-	return orders, nil
+	return ordersFromModels(rows), nil
 }
 
 func (r *OrderRepo) ListAllOpen(ctx context.Context) ([]*domain.Order, error) {
-	q := r.Querier(ctx)
-
-	rows, err := q.Query(ctx,
-		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_quantity, status, created_at, updated_at
-		 FROM orders
-		 WHERE status IN ('open', 'partially_filled')
-		 ORDER BY market_id, outcome_id, created_at ASC`)
+	rows, err := r.Q(ctx).ListAllOpenOrders(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list all open orders: %w", err)
 	}
-	defer rows.Close()
-
-	var orders []*domain.Order
-	for rows.Next() {
-		o, err := scanOrderFromRows(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: list all open orders scan: %w", err)
-		}
-		orders = append(orders, o)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postgres: list all open orders rows: %w", err)
-	}
-
-	return orders, nil
+	return ordersFromModels(rows), nil
 }
 
 func (r *OrderRepo) ListByUser(ctx context.Context, userID string, limit, offset int) ([]*domain.Order, int64, error) {
-	q := r.Querier(ctx)
-
 	if limit <= 0 {
 		limit = 50
 	}
@@ -153,104 +92,51 @@ func (r *OrderRepo) ListByUser(ctx context.Context, userID string, limit, offset
 		offset = 0
 	}
 
-	// Count.
-	var total int64
-	if err := q.QueryRow(ctx,
-		`SELECT COUNT(*) FROM orders WHERE user_id = $1`, userID).Scan(&total); err != nil {
+	total, err := r.Q(ctx).CountOrdersByUser(ctx, userID)
+	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: list orders by user count: %w", err)
 	}
 
-	// Data.
-	rows, err := q.Query(ctx,
-		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
-		        filled_quantity, status, created_at, updated_at
-		 FROM orders WHERE user_id = $1
-		 ORDER BY created_at DESC
-		 LIMIT $2 OFFSET $3`, userID, limit, offset)
+	rows, err := r.Q(ctx).ListOrdersByUser(ctx, sqlcgen.ListOrdersByUserParams{
+		UserID: userID,
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: list orders by user query: %w", err)
 	}
-	defer rows.Close()
 
-	var orders []*domain.Order
-	for rows.Next() {
-		o, err := scanOrderFromRows(rows)
-		if err != nil {
-			return nil, 0, fmt.Errorf("postgres: list orders by user scan: %w", err)
-		}
-		orders = append(orders, o)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("postgres: list orders by user rows: %w", err)
-	}
-
-	return orders, total, nil
+	return ordersFromModels(rows), total, nil
 }
 
 func (r *OrderRepo) CancelAllByMarket(ctx context.Context, marketID string) (int64, error) {
-	q := r.Querier(ctx)
-
-	tag, err := q.Exec(ctx,
-		`UPDATE orders SET status = 'cancelled', updated_at = NOW()
-		 WHERE market_id = $1 AND status IN ('open', 'partial')`, marketID)
+	n, err := r.Q(ctx).CancelAllOrdersByMarket(ctx, marketID)
 	if err != nil {
 		return 0, fmt.Errorf("postgres: cancel all orders by market: %w", err)
 	}
-
-	return tag.RowsAffected(), nil
+	return n, nil
 }
 
-// scanOrder scans a single order from pgx.Row.
-func scanOrder(row pgx.Row) (*domain.Order, error) {
-	var o domain.Order
-	var side, status string
-
-	err := row.Scan(
-		&o.ID,
-		&o.UserID,
-		&o.MarketID,
-		&o.OutcomeID,
-		&side,
-		&o.Price,
-		&o.Quantity,
-		&o.FilledQty,
-		&status,
-		&o.CreatedAt,
-		&o.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
+func orderFromModel(r sqlcgen.Order) *domain.Order {
+	return &domain.Order{
+		ID:        r.ID,
+		UserID:    r.UserID,
+		MarketID:  r.MarketID,
+		OutcomeID: r.OutcomeID,
+		Side:      domain.OrderSide(r.Side),
+		Price:     r.Price,
+		Quantity:  r.Quantity,
+		FilledQty: r.FilledQuantity,
+		Status:    domain.OrderStatus(r.Status),
+		CreatedAt: r.CreatedAt.Time,
+		UpdatedAt: r.UpdatedAt.Time,
 	}
-
-	o.Side = domain.OrderSide(side)
-	o.Status = domain.OrderStatus(status)
-	return &o, nil
 }
 
-// scanOrderFromRows scans a single order from pgx.Rows.
-func scanOrderFromRows(rows pgx.Rows) (*domain.Order, error) {
-	var o domain.Order
-	var side, status string
-
-	err := rows.Scan(
-		&o.ID,
-		&o.UserID,
-		&o.MarketID,
-		&o.OutcomeID,
-		&side,
-		&o.Price,
-		&o.Quantity,
-		&o.FilledQty,
-		&status,
-		&o.CreatedAt,
-		&o.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
+func ordersFromModels(rows []sqlcgen.Order) []*domain.Order {
+	orders := make([]*domain.Order, len(rows))
+	for i, row := range rows {
+		orders[i] = orderFromModel(row)
 	}
-
-	o.Side = domain.OrderSide(side)
-	o.Status = domain.OrderStatus(status)
-	return &o, nil
+	return orders
 }

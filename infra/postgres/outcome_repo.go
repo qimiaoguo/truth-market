@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/truthmarket/truth-market/infra/postgres/sqlcgen"
 	"github.com/truthmarket/truth-market/pkg/domain"
 	"github.com/truthmarket/truth-market/pkg/repository"
 )
@@ -28,101 +29,50 @@ func (r *OutcomeRepo) CreateBatch(ctx context.Context, outcomes []*domain.Outcom
 		return nil
 	}
 
-	q := r.Querier(ctx)
-
-	// Build a batch INSERT with multiple value rows.
-	const baseCols = 5
-	sql := `INSERT INTO outcomes (id, market_id, label, index, is_winner) VALUES `
-
-	args := make([]any, 0, len(outcomes)*baseCols)
-	valueRows := make([]string, 0, len(outcomes))
-
+	params := make([]sqlcgen.CreateOutcomeBatchParams, len(outcomes))
 	for i, o := range outcomes {
-		offset := i * baseCols
-		valueRows = append(valueRows, fmt.Sprintf(
-			"($%d, $%d, $%d, $%d, $%d)",
-			offset+1, offset+2, offset+3, offset+4, offset+5,
-		))
-		args = append(args, o.ID, o.MarketID, o.Label, o.Index, o.IsWinner)
+		params[i] = sqlcgen.CreateOutcomeBatchParams{
+			ID:       o.ID,
+			MarketID: o.MarketID,
+			Label:    o.Label,
+			Index:    int32(o.Index),
+			IsWinner: o.IsWinner,
+		}
 	}
 
-	sql += joinStrings(valueRows, ", ")
-
-	_, err := q.Exec(ctx, sql, args...)
+	_, err := r.Q(ctx).CreateOutcomeBatch(ctx, params)
 	if err != nil {
 		return fmt.Errorf("postgres: create outcomes batch: %w", err)
 	}
-
 	return nil
 }
 
 func (r *OutcomeRepo) ListByMarket(ctx context.Context, marketID string) ([]*domain.Outcome, error) {
-	q := r.Querier(ctx)
-
-	rows, err := q.Query(ctx,
-		`SELECT id, market_id, label, index, is_winner
-		 FROM outcomes WHERE market_id = $1 ORDER BY index ASC`, marketID)
+	rows, err := r.Q(ctx).ListOutcomesByMarket(ctx, marketID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list outcomes by market: %w", err)
 	}
-	defer rows.Close()
 
-	var outcomes []*domain.Outcome
-	for rows.Next() {
-		o, err := scanOutcomeFromRows(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: list outcomes scan: %w", err)
+	outcomes := make([]*domain.Outcome, len(rows))
+	for i, row := range rows {
+		outcomes[i] = &domain.Outcome{
+			ID:       row.ID,
+			MarketID: row.MarketID,
+			Label:    row.Label,
+			Index:    int(row.Index),
+			IsWinner: row.IsWinner,
 		}
-		outcomes = append(outcomes, o)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postgres: list outcomes rows: %w", err)
-	}
-
 	return outcomes, nil
 }
 
 func (r *OutcomeRepo) SetWinner(ctx context.Context, id string) error {
-	q := r.Querier(ctx)
-
-	tag, err := q.Exec(ctx,
-		`UPDATE outcomes SET is_winner = true WHERE id = $1`, id)
+	n, err := r.Q(ctx).SetOutcomeWinner(ctx, id)
 	if err != nil {
 		return fmt.Errorf("postgres: set outcome winner: %w", err)
 	}
-
-	if tag.RowsAffected() == 0 {
+	if n == 0 {
 		return fmt.Errorf("postgres: set outcome winner: %w", pgx.ErrNoRows)
 	}
-
 	return nil
-}
-
-// scanOutcomeFromRows scans a single outcome from pgx.Rows.
-func scanOutcomeFromRows(rows pgx.Rows) (*domain.Outcome, error) {
-	var o domain.Outcome
-	err := rows.Scan(
-		&o.ID,
-		&o.MarketID,
-		&o.Label,
-		&o.Index,
-		&o.IsWinner,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &o, nil
-}
-
-// joinStrings joins string slices with a separator.
-func joinStrings(parts []string, sep string) string {
-	if len(parts) == 0 {
-		return ""
-	}
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result += sep + p
-	}
-	return result
 }

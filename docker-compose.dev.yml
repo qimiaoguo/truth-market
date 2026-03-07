@@ -52,6 +52,8 @@ services:
 
   jaeger-dev:
     image: jaegertracing/all-in-one:latest
+    labels:
+      dev.orbstack.http-port: "16686"
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
@@ -59,6 +61,8 @@ services:
 
   prometheus-dev:
     image: prom/prometheus:v3.4.0
+    labels:
+      dev.orbstack.http-port: "9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:

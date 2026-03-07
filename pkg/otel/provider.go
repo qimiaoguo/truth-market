@@ -15,9 +15,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
 // Config holds the settings required to connect to an OpenTelemetry collector.
@@ -72,17 +70,14 @@ func InitProvider(ctx context.Context, cfg Config) (shutdown func(context.Contex
 		propagation.Baggage{},
 	))
 
-	// --- gRPC dial options ---
-	var dialOpts []grpc.DialOption
-	if cfg.Insecure {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-
 	// --- Trace exporter ---
-	traceExporter, err := otlptracegrpc.New(ctx,
+	traceOpts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.Endpoint),
-		otlptracegrpc.WithDialOption(dialOpts...),
-	)
+	}
+	if cfg.Insecure {
+		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
+	}
+	traceExporter, err := otlptracegrpc.New(ctx, traceOpts...)
 	if err != nil {
 		handleErr(err)
 		return shutdown, err
@@ -97,10 +92,13 @@ func InitProvider(ctx context.Context, cfg Config) (shutdown func(context.Contex
 	shutdownFuncs = append(shutdownFuncs, tp.Shutdown)
 
 	// --- Metric exporter ---
-	metricExporter, err := otlpmetricgrpc.New(ctx,
+	metricOpts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
-		otlpmetricgrpc.WithDialOption(dialOpts...),
-	)
+	}
+	if cfg.Insecure {
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
+	}
+	metricExporter, err := otlpmetricgrpc.New(ctx, metricOpts...)
 	if err != nil {
 		handleErr(err)
 		return shutdown, err

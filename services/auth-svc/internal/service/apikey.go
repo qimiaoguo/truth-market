@@ -50,9 +50,9 @@ func (s *APIKeyService) GenerateAPIKey(ctx context.Context, userID, label string
 		return "", nil, fmt.Errorf("failed to generate API key ID: %w", err)
 	}
 
-	// Store a prefix for display/identification purposes (e.g., "tm_abcdef12").
-	// We use the first 12 characters of the raw key as the prefix.
-	keyPrefix := rawKey[:12]
+	// Store a prefix for display/identification purposes (e.g., "tm_abcdef1").
+	// We use the first 10 characters of the raw key to fit the DB VARCHAR(10) column.
+	keyPrefix := rawKey[:10]
 
 	apiKey := &domain.APIKey{
 		ID:        keyID,

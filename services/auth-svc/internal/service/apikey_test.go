@@ -136,6 +136,11 @@ func TestGenerateAPIKey_ReturnsKeyWithPrefix(t *testing.T) {
 	// The KeyPrefix stored should match the beginning of the raw key.
 	assert.True(t, strings.HasPrefix(rawKey, apiKey.KeyPrefix),
 		"raw key should start with the stored KeyPrefix")
+
+	// KeyPrefix must fit in the DB column (VARCHAR(10)).
+	assert.LessOrEqual(t, len(apiKey.KeyPrefix), 10,
+		"key prefix must be at most 10 chars to fit DB column, got %d: %q",
+		len(apiKey.KeyPrefix), apiKey.KeyPrefix)
 }
 
 func TestGenerateAPIKey_StoresOnlyHash(t *testing.T) {

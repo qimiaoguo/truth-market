@@ -132,13 +132,12 @@ func (h *OrderHandler) PlaceOrder(c *gin.Context) {
 
 // mintRequest is the expected JSON body for the MintTokens endpoint.
 type mintRequest struct {
+	MarketID string `json:"market_id"`
 	Quantity string `json:"quantity"`
 }
 
 // MintTokens handles POST /api/v1/markets/:id/mint.
 func (h *OrderHandler) MintTokens(c *gin.Context) {
-	marketID := c.Param("id")
-
 	var req mintRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		errMsg := "invalid request body"
@@ -163,7 +162,7 @@ func (h *OrderHandler) MintTokens(c *gin.Context) {
 
 	resp, err := h.tradingClient.MintTokens(c.Request.Context(), &tradingv1.MintTokensRequest{
 		UserId:   user.GetId(),
-		MarketId: marketID,
+		MarketId: req.MarketID,
 		Quantity: req.Quantity,
 	})
 	if err != nil {

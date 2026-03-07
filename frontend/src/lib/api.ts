@@ -91,7 +91,7 @@ class ApiClient {
   }
 
   // Trading
-  async mintTokens(marketId: string, quantity: number) {
+  async mintTokens(marketId: string, quantity: string) {
     return this.post<{ positions: Position[] }>('/trading/mint', { market_id: marketId, quantity })
   }
 

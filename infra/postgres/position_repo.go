@@ -29,7 +29,7 @@ func (r *PositionRepo) Upsert(ctx context.Context, position *domain.Position) er
 	_, err := q.Exec(ctx,
 		`INSERT INTO positions (id, user_id, market_id, outcome_id, quantity, avg_price, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 ON CONFLICT (user_id, outcome_id) DO UPDATE SET
+		 ON CONFLICT (user_id, market_id, outcome_id) DO UPDATE SET
 			quantity = EXCLUDED.quantity,
 			avg_price = EXCLUDED.avg_price,
 			updated_at = EXCLUDED.updated_at`,

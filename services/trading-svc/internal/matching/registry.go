@@ -88,6 +88,14 @@ func (r *Registry) CancelOrder(outcomeID, orderID string) (*domain.Order, error)
 	return nil, errOrderNotFound
 }
 
+// RestoreOrder inserts an existing order into the in-memory orderbook without
+// triggering matching. Used at startup to rebuild the orderbook from the database.
+func (r *Registry) RestoreOrder(order *domain.Order) {
+	eng := r.getOrCreate(order.MarketID)
+	ob := eng.getOrCreateOrderbook(order.OutcomeID)
+	ob.AddOrder(order)
+}
+
 // GetOrderbookDepth satisfies grpc.OrderbookProvider. It searches all engines
 // for the orderbook matching the given outcomeID and returns aggregated depth.
 func (r *Registry) GetOrderbookDepth(outcomeID string, levels int) (bids, asks []grpcserver.OrderbookLevel) {

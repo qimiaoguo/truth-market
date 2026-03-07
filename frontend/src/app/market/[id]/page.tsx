@@ -1,6 +1,6 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import { useMarket } from '@/hooks/useMarket'
 import { OrderBook } from '@/components/orderbook/OrderBook'
 import { TradingPanel } from '@/components/trading/TradingPanel'
@@ -21,6 +21,7 @@ export default function MarketDetailPage({
 }) {
   const { id } = use(params)
   const { data: market, isLoading, error } = useMarket(id)
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -39,7 +40,9 @@ export default function MarketDetailPage({
   }
 
   const outcomes = market.outcomes ?? []
-  const firstOutcome = outcomes[0]
+  // Use selected outcome, or fall back to the first one
+  const activeOutcomeId = selectedOutcomeId ?? outcomes[0]?.id
+  const activeOutcome = outcomes.find((o) => o.id === activeOutcomeId)
 
   return (
     <div>
@@ -71,19 +74,28 @@ export default function MarketDetailPage({
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-neutral-900 mb-3">Outcomes</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {outcomes.map((outcome) => (
-            <div
-              key={outcome.id}
-              className="flex items-center justify-between p-4 bg-card rounded-xl border border-card-border"
-            >
-              <span className="font-medium text-neutral-900">
-                {outcome.label}
-              </span>
-              <span className="text-lg font-bold text-primary-600">
-                {Math.round(Number(outcome.price) * 100)}¢
-              </span>
-            </div>
-          ))}
+          {outcomes.map((outcome) => {
+            const isSelected = outcome.id === activeOutcomeId
+            return (
+              <button
+                key={outcome.id}
+                type="button"
+                onClick={() => setSelectedOutcomeId(outcome.id)}
+                className={`flex items-center justify-between p-4 bg-card rounded-xl border text-left cursor-pointer transition-colors ${
+                  isSelected
+                    ? 'ring-2 ring-primary-500 border-primary-500'
+                    : 'border-card-border hover:border-neutral-400'
+                }`}
+              >
+                <span className="font-medium text-neutral-900">
+                  {outcome.label}
+                </span>
+                <span className="text-lg font-bold text-primary-600">
+                  {Math.round(Number(outcome.price) * 100)}¢
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -95,15 +107,29 @@ export default function MarketDetailPage({
       {/* Trading + Orderbook grid */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <h2 className="text-lg font-semibold text-neutral-900 mb-3">Order Book</h2>
-          <OrderBook marketId={id} outcomeId={firstOutcome?.id} />
+          <h2 className="text-lg font-semibold text-neutral-900 mb-3">
+            Order Book
+            {activeOutcome && (
+              <span className="ml-2 text-sm font-normal text-neutral-500">
+                — {activeOutcome.label}
+              </span>
+            )}
+          </h2>
+          <OrderBook marketId={id} outcomeId={activeOutcomeId} />
         </div>
 
         <div>
-          <h2 className="text-lg font-semibold text-neutral-900 mb-3">Trade</h2>
+          <h2 className="text-lg font-semibold text-neutral-900 mb-3">
+            Trade
+            {activeOutcome && (
+              <span className="ml-2 text-sm font-normal text-neutral-500">
+                — {activeOutcome.label}
+              </span>
+            )}
+          </h2>
           <TradingPanel
             marketId={id}
-            outcomeId={firstOutcome?.id ?? ''}
+            outcomeId={activeOutcomeId ?? ''}
           />
         </div>
       </div>

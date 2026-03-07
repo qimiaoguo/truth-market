@@ -82,6 +82,18 @@ func (m *mockOrderRepo) ListByUser(ctx context.Context, userID string, limit, of
 	return result, int64(len(result)), nil
 }
 
+func (m *mockOrderRepo) ListAllOpen(ctx context.Context) ([]*domain.Order, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var result []*domain.Order
+	for _, o := range m.orders {
+		if o.Status == domain.OrderStatusOpen || o.Status == domain.OrderStatusPartial {
+			result = append(result, o)
+		}
+	}
+	return result, nil
+}
+
 func (m *mockOrderRepo) CancelAllByMarket(ctx context.Context, marketID string) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

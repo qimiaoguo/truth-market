@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
+import { usePositions } from '@/hooks/usePositions'
 
 interface TradingPanelProps {
   marketId: string
@@ -14,6 +16,10 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
   const [quantity, setQuantity] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const user = useAuthStore((s) => s.user)
+  const { data: positions } = usePositions(marketId)
+  const outcomePosition = positions?.find((p) => p.outcome_id === outcomeId)
+  const availableQty = outcomePosition ? Number(outcomePosition.quantity) : 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,6 +80,23 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
         </button>
       </div>
 
+      {side === 'buy' && user && (
+        <div className="mb-3 flex items-center justify-between text-sm text-neutral-500">
+          <span>Available</span>
+          <span className="font-medium tabular-nums text-neutral-700">
+            {Number(user.balance).toLocaleString()} U
+          </span>
+        </div>
+      )}
+      {side === 'sell' && (
+        <div className="mb-3 flex items-center justify-between text-sm text-neutral-500">
+          <span>Position</span>
+          <span className="font-medium tabular-nums text-neutral-700">
+            {availableQty > 0 ? `${availableQty.toLocaleString()} shares` : 'No position'}
+          </span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="trade-price" className="block text-sm font-medium text-neutral-700 mb-1">
@@ -107,6 +130,13 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
             className="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
+
+        {price && quantity && (
+          <div className="flex items-center justify-between text-xs text-neutral-500">
+            <span>Est. {side === 'buy' ? 'cost' : 'proceeds'}</span>
+            <span className="tabular-nums">{(Number(price) * Number(quantity)).toFixed(2)} U</span>
+          </div>
+        )}
 
         <button
           type="submit"

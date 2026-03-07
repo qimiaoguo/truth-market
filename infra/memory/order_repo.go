@@ -90,6 +90,22 @@ func (r *OrderRepository) ListOpenByMarket(_ context.Context, marketID string) (
 	return result, nil
 }
 
+// ListAllOpen returns all open or partially filled orders across all markets.
+func (r *OrderRepository) ListAllOpen(_ context.Context) ([]*domain.Order, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []*domain.Order
+	for _, order := range r.orders {
+		if order.Status == domain.OrderStatusOpen || order.Status == domain.OrderStatusPartial {
+			out := *order
+			result = append(result, &out)
+		}
+	}
+
+	return result, nil
+}
+
 // ListByUser returns paginated orders for a user along with the total count.
 func (r *OrderRepository) ListByUser(_ context.Context, userID string, limit, offset int) ([]*domain.Order, int64, error) {
 	r.mu.RLock()

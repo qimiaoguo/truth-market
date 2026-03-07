@@ -20,7 +20,7 @@ export function MintModal({ marketId }: MintModalProps) {
     setMessage(null)
 
     try {
-      const res = await api.mintTokens(marketId, Number(quantity))
+      const res = await api.mintTokens(marketId, quantity)
 
       if (res.ok) {
         setMessage('Minted')

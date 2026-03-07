@@ -21,6 +21,9 @@ type OrderRepository interface {
 	// ListOpenByMarket returns all open (unfilled) orders for a given market.
 	ListOpenByMarket(ctx context.Context, marketID string) ([]*domain.Order, error)
 
+	// ListAllOpen returns all open or partially filled orders across all markets.
+	ListAllOpen(ctx context.Context) ([]*domain.Order, error)
+
 	// ListByUser returns paginated orders for a user along with the total count.
 	ListByUser(ctx context.Context, userID string, limit, offset int) ([]*domain.Order, int64, error)
 

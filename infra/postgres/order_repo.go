@@ -113,6 +113,36 @@ func (r *OrderRepo) ListOpenByMarket(ctx context.Context, marketID string) ([]*d
 	return orders, nil
 }
 
+func (r *OrderRepo) ListAllOpen(ctx context.Context) ([]*domain.Order, error) {
+	q := r.Querier(ctx)
+
+	rows, err := q.Query(ctx,
+		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
+		        filled_quantity, status, created_at, updated_at
+		 FROM orders
+		 WHERE status IN ('open', 'partial')
+		 ORDER BY market_id, outcome_id, created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: list all open orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []*domain.Order
+	for rows.Next() {
+		o, err := scanOrderFromRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: list all open orders scan: %w", err)
+		}
+		orders = append(orders, o)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgres: list all open orders rows: %w", err)
+	}
+
+	return orders, nil
+}
+
 func (r *OrderRepo) ListByUser(ctx context.Context, userID string, limit, offset int) ([]*domain.Order, int64, error) {
 	q := r.Querier(ctx)
 

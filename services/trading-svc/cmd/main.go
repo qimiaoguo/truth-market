@@ -91,6 +91,17 @@ func main() {
 	// ---------- Matching Engine ----------
 	engine := matching.NewRegistry()
 
+	// Restore open orders into in-memory orderbook from database.
+	openOrders, err := orderRepo.ListAllOpen(ctx)
+	if err != nil {
+		log.Error("failed to restore orderbook", "error", err)
+	} else {
+		for _, o := range openOrders {
+			engine.RestoreOrder(o)
+		}
+		log.Info("orderbook restored", "orders", len(openOrders))
+	}
+
 	// ---------- Services ----------
 	orderSvc := service.NewOrderService(orderRepo, userRepo, positionRepo, tradeRepo, txManager, engine)
 	mintSvc := service.NewMintService(userRepo, outcomeRepo, positionRepo, tradeRepo, txManager)

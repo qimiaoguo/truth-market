@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 COMPOSE_FILE="docker-compose.dev.yml"
+PID_FILE="$ROOT_DIR/.dev/pids"
+SERVICE_PORTS=(9001 9002 9003 9004 8080)
 
 # Database config matching docker-compose.dev.yml
 DB_USER="truthmarket_dev"
@@ -35,7 +37,11 @@ if [[ "${1:-}" == "--reset" ]]; then
     echo "    Done. Starting fresh."
 fi
 
+# ── Kill leftover processes from previous run ──
+bash "$ROOT_DIR/scripts/dev-kill.sh"
+
 # Track child PIDs for cleanup
+mkdir -p "$(dirname "$PID_FILE")"
 PIDS=()
 
 cleanup() {
@@ -44,7 +50,15 @@ cleanup() {
     for pid in "${PIDS[@]}"; do
         kill "$pid" 2>/dev/null || true
     done
+    # Also kill by port to catch orphaned go run child processes
+    for port in "${SERVICE_PORTS[@]}"; do
+        local_pids=$(lsof -ti :"$port" 2>/dev/null || true)
+        if [[ -n "$local_pids" ]]; then
+            echo "$local_pids" | xargs kill 2>/dev/null || true
+        fi
+    done
     wait 2>/dev/null
+    rm -f "$PID_FILE"
     echo "==> Go services stopped. Containers still running (data persisted)."
     echo "    Run 'make dev-down' to stop containers, 'make dev-destroy' to wipe data."
 }
@@ -117,6 +131,7 @@ start_service() {
         JWT_SECRET="$JWT_SECRET" OTEL_ENDPOINT="$OTEL_ENDPOINT" \
         go run "./${dir}/cmd/" &
     PIDS+=($!)
+    echo "$!" >> "$PID_FILE"
 }
 
 start_service "auth-svc"    "services/auth-svc"    9001
@@ -132,6 +147,7 @@ echo "    Starting gateway on port 8080..."
 PORT=8080 REDIS_ADDR="$REDIS_ADDR" JWT_SECRET="$JWT_SECRET" OTEL_ENDPOINT="$OTEL_ENDPOINT" \
     go run ./services/gateway/cmd/ &
 PIDS+=($!)
+echo "$!" >> "$PID_FILE"
 
 # ── Step 4: Wait for gateway ──
 echo "==> Waiting for gateway..."

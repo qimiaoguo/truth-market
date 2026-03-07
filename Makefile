@@ -178,13 +178,14 @@ dev-reset:
 	@bash scripts/dev.sh --reset
 
 dev-down:
+	@bash scripts/dev-kill.sh
 	@docker compose -f docker-compose.dev.yml down
-	@pkill -f "go run \./services/" 2>/dev/null || true
 	@echo "==> Dev environment stopped (data preserved in volume)."
 
 dev-destroy:
+	@bash scripts/dev-kill.sh
 	@docker compose -f docker-compose.dev.yml down -v
-	@pkill -f "go run \./services/" 2>/dev/null || true
+	@rm -rf .dev
 	@echo "==> Dev environment destroyed (volumes removed)."
 
 # ──────────────────────────────────────────────────

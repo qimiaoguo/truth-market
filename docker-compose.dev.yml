@@ -1,0 +1,68 @@
+services:
+  postgres-dev:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: truthmarket_dev
+      POSTGRES_PASSWORD: truthmarket_dev
+      POSTGRES_DB: truthmarket_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U truthmarket_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-dev:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate-dev:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ./migrations:/migrations
+    command:
+      - "-path"
+      - "/migrations"
+      - "-database"
+      - "postgres://truthmarket_dev:truthmarket_dev@postgres-dev:5432/truthmarket_dev?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+
+  otel-collector-dev:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger-dev
+
+  jaeger-dev:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+
+  prometheus-dev:
+    image: prom/prometheus:v3.4.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+volumes:
+  dev_postgres_data:

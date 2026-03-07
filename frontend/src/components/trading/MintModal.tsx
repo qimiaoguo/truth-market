@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { useRefreshUser } from '@/hooks/useRefreshUser'
 
 interface MintModalProps {
   marketId: string
@@ -12,6 +13,7 @@ export function MintModal({ marketId }: MintModalProps) {
   const [quantity, setQuantity] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const refreshUser = useRefreshUser()
 
   const handleConfirm = async () => {
     if (!quantity || Number(quantity) <= 0) return
@@ -25,13 +27,12 @@ export function MintModal({ marketId }: MintModalProps) {
       if (res.ok) {
         setMessage('Minted')
         setQuantity('')
+        refreshUser()
       } else {
         setMessage(res.error || 'Failed to mint')
       }
     } catch {
-      // For demo/testing, show success even if API unavailable
-      setMessage('Minted')
-      setQuantity('')
+      setMessage('Failed to mint')
     } finally {
       setSubmitting(false)
     }

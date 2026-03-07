@@ -67,43 +67,65 @@ Before writing any implementation code:
 
 ## Phase 3: End-to-End Verification
 
-After all automated tests pass, verify the feature works for real.
+After all automated tests pass, verify the feature works for real. Choose the appropriate method:
 
-### Step 1: Start Services
+### Option A: Integration Tests (preferred for backend)
+
+Run service-level integration tests that use testcontainers (real postgres + redis, no image build needed):
 
 ```bash
-# If backend code changed, rebuild images
-docker compose up -d --build
+# Trading/order changes — full settlement flow with real DB
+make test-trading-integration
 
-# If only frontend changed
-docker compose up -d  # backend services
-cd frontend && pnpm dev  # frontend dev server
+# All infra integration tests
+make test-infra
 ```
 
-### Step 2: Verify API (backend changes)
+These tests verify real SQL execution, transactions, and constraints — not mocks.
+
+### Option B: Local Dev Services (for manual debugging / curl / browser)
+
+Start all Go services locally with `go run` (no Docker image build):
+
+```bash
+make dev          # Starts postgres+redis containers + all 5 services
+# Gateway available at http://localhost:8080
+# Press Ctrl+C to stop services
+
+make dev-down     # Stop everything (containers + go processes)
+```
+
+Then verify:
 
 ```bash
 # Confirm gateway is healthy
 curl -s localhost:8080/api/v1/markets | head -20
 
-# Test the specific endpoint you changed — examples:
+# Test specific endpoints
 curl -s localhost:8080/api/v1/markets/{id}
 curl -s -X POST localhost:8080/api/v1/orders -H "Authorization: Bearer <token>" -d '...'
 ```
 
-### Step 3: Verify UI (frontend changes)
+For frontend changes, also start the dev server:
 
-- Open `localhost:3000` in browser, or use MCP browser tools to take a screenshot
-- Navigate to the page you changed
-- Confirm the feature works visually
-- Capture output or screenshot as evidence
+```bash
+cd frontend && pnpm dev   # http://localhost:3000
+```
 
-### Step 4: Evidence
+### Option C: Full Docker Compose (pre-release only)
+
+Build all service images — only needed for final smoke test before deployment:
+
+```bash
+docker compose up -d --build
+```
+
+### Evidence
 
 You MUST have concrete evidence before claiming completion:
-- Command output showing success
-- Screenshot of the UI working
+- Integration test output showing PASS
 - curl response showing correct data
+- Screenshot of the UI working
 
 **"It should work" is not evidence. Run it and show the output.**
 
@@ -116,6 +138,5 @@ Before claiming a fix/feature is done:
 - [ ] Module-specific tests pass (`go test` or `pnpm test:run`)
 - [ ] Lint passes (`make lint` or `pnpm lint`)
 - [ ] Build passes (`pnpm build` if frontend changed)
-- [ ] Docker services start and run (`docker compose up -d --build`)
-- [ ] End-to-end verification done (curl / browser)
+- [ ] End-to-end verification done (integration test / `make dev` + curl / browser)
 - [ ] Have evidence (command output or screenshot)

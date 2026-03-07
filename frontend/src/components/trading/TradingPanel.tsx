@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 import { usePositions } from '@/hooks/usePositions'
+import { useRefreshUser } from '@/hooks/useRefreshUser'
 
 interface TradingPanelProps {
   marketId: string
@@ -17,6 +18,7 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
   const [message, setMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const user = useAuthStore((s) => s.user)
+  const refreshUser = useRefreshUser()
   const { data: positions } = usePositions(marketId)
   const outcomePosition = positions?.find((p) => p.outcome_id === outcomeId)
   const availableQty = outcomePosition ? Number(outcomePosition.quantity) : 0
@@ -41,11 +43,12 @@ export function TradingPanel({ marketId, outcomeId }: TradingPanelProps) {
         setMessage('Order placed')
         setPrice('')
         setQuantity('')
+        refreshUser()
       } else {
         setMessage(res.error || 'Failed to place order')
       }
     } catch {
-      setMessage('Order placed')
+      setMessage('Failed to place order')
     } finally {
       setSubmitting(false)
     }

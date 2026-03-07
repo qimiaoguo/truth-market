@@ -136,8 +136,21 @@ func (m *mockMatchingEngine) PlaceOrder(order *domain.Order) (*MatchResult, erro
 	if result == nil {
 		result = &MatchResult{}
 	}
-	// If no resting order specified, the order rests on the book.
-	if result.Resting == nil {
+
+	// Simulate real engine: update taker order's FilledQty and Status from trades.
+	for _, trade := range result.Trades {
+		order.FilledQty = order.FilledQty.Add(trade.Quantity)
+	}
+	if order.FilledQty.GreaterThan(decimal.Zero) {
+		if order.FilledQty.GreaterThanOrEqual(order.Quantity) {
+			order.Status = domain.OrderStatusFilled
+		} else {
+			order.Status = domain.OrderStatusPartial
+		}
+	}
+
+	// If no resting order specified and order has remaining quantity, it rests.
+	if result.Resting == nil && order.FilledQty.LessThan(order.Quantity) {
 		result.Resting = order
 	}
 	return result, nil
@@ -526,4 +539,376 @@ func TestPlaceOrder_InvalidPrice_ReturnsError(t *testing.T) {
 		"user balance should remain 100, got: %s", user.Balance)
 	assert.True(t, user.LockedBalance.Equal(decimal.Zero),
 		"user locked_balance should remain 0, got: %s", user.LockedBalance)
+}
+
+// ---------------------------------------------------------------------------
+// Tests: PlaceOrder -- Trade settlement (buy matches sell)
+// ---------------------------------------------------------------------------
+
+func TestPlaceOrder_BuyMatchesSell_SettlementCorrect(t *testing.T) {
+	svc, orderRepo, userRepo, positionRepo, tradeRepo, _, engine := newTestOrderService()
+	ctx := context.Background()
+
+	// Setup: Seller (user-A) previously placed a sell order at 0.70 for 10 shares.
+	// The sell order is already on the book, position was already reduced.
+	seedUser(userRepo, &domain.User{
+		ID:            "user-A",
+		WalletAddress: "0xAAA",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(50), // 50 available
+		LockedBalance: decimal.Zero,
+		CreatedAt:     time.Now(),
+	})
+	makerOrder := &domain.Order{
+		ID:        "sell-order-1",
+		UserID:    "user-A",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideSell,
+		Price:     decimal.NewFromFloat(0.70),
+		Quantity:  decimal.NewFromInt(10),
+		FilledQty: decimal.Zero,
+		Status:    domain.OrderStatusOpen,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	seedOrder(orderRepo, makerOrder)
+
+	// Setup: Buyer (user-B) with balance 100.
+	seedUser(userRepo, &domain.User{
+		ID:            "user-B",
+		WalletAddress: "0xBBB",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(100),
+		LockedBalance: decimal.Zero,
+		CreatedAt:     time.Now(),
+	})
+
+	// Configure mock engine to return a full match trade.
+	tradePrice := decimal.NewFromFloat(0.70) // executes at maker price
+	tradeQty := decimal.NewFromInt(10)
+	engine.matchResult = &MatchResult{
+		Trades: []*domain.Trade{
+			{
+				ID:           "trade-1",
+				MarketID:     "market-1",
+				OutcomeID:    "o-yes",
+				MakerOrderID: "sell-order-1",
+				TakerOrderID: "", // will be set by matching in real code; mock sets it
+				MakerUserID:  "user-A",
+				TakerUserID:  "user-B",
+				Price:        tradePrice,
+				Quantity:     tradeQty,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+
+	// Action: Buyer places buy order at 0.80 for 10 shares.
+	buyPrice := decimal.NewFromFloat(0.80)
+	order, trades, err := svc.PlaceOrder(ctx, PlaceOrderRequest{
+		UserID:    "user-B",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideBuy,
+		Price:     buyPrice,
+		Quantity:  tradeQty,
+	})
+	require.NoError(t, err)
+
+	// Assert: Order is fully filled.
+	assert.Equal(t, domain.OrderStatusFilled, order.Status,
+		"taker buy order should be fully filled")
+	assert.True(t, order.FilledQty.Equal(tradeQty),
+		"filled qty should equal trade qty")
+
+	// Assert: Trade returned.
+	assert.Len(t, trades, 1, "one trade should be returned")
+
+	// Assert: Trade persisted to DB.
+	tradeRepo.mu.RLock()
+	assert.Len(t, tradeRepo.trades, 1, "one trade should be persisted")
+	tradeRepo.mu.RUnlock()
+
+	// Assert: Buyer (user-B) balance settled correctly.
+	// Locked: 0.80 * 10 = 8.00 (locked at order creation)
+	// Trade at 0.70, refund: (0.80 - 0.70) * 10 = 1.00
+	// Net: balance was 100, locked 8.00 → balance 92.00
+	// After settlement: balance 92.00 + 1.00 refund = 93.00, locked 8.00 - 8.00 = 0
+	buyer, err := userRepo.GetByID(ctx, "user-B")
+	require.NoError(t, err)
+	assert.True(t, buyer.Balance.Equal(decimal.NewFromInt(93)),
+		"buyer balance should be 93 (100 - 8 locked + 1 refund), got: %s", buyer.Balance)
+	assert.True(t, buyer.LockedBalance.Equal(decimal.Zero),
+		"buyer locked balance should be 0, got: %s", buyer.LockedBalance)
+
+	// Assert: Seller (user-A) receives proceeds.
+	// Proceeds: 0.70 * 10 = 7.00
+	seller, err := userRepo.GetByID(ctx, "user-A")
+	require.NoError(t, err)
+	assert.True(t, seller.Balance.Equal(decimal.NewFromInt(57)),
+		"seller balance should be 57 (50 + 7 proceeds), got: %s", seller.Balance)
+
+	// Assert: Buyer gets position.
+	buyerPos, err := positionRepo.GetByUserAndOutcome(ctx, "user-B", "o-yes")
+	require.NoError(t, err)
+	assert.True(t, buyerPos.Quantity.Equal(tradeQty),
+		"buyer should have 10 shares, got: %s", buyerPos.Quantity)
+
+	// Assert: Maker sell order status updated in DB.
+	makerOrderDB, err := orderRepo.GetByID(ctx, "sell-order-1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusFilled, makerOrderDB.Status,
+		"maker sell order should be fully filled")
+	assert.True(t, makerOrderDB.FilledQty.Equal(tradeQty),
+		"maker filled qty should be 10")
+
+	// Assert: Taker buy order status updated in DB.
+	takerOrderDB, err := orderRepo.GetByID(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusFilled, takerOrderDB.Status,
+		"taker buy order should be fully filled in DB")
+}
+
+// ---------------------------------------------------------------------------
+// Tests: PlaceOrder -- Sell matches buy, settlement correct
+// ---------------------------------------------------------------------------
+
+func TestPlaceOrder_SellMatchesBuy_SettlementCorrect(t *testing.T) {
+	svc, orderRepo, userRepo, positionRepo, tradeRepo, _, engine := newTestOrderService()
+	ctx := context.Background()
+
+	// Setup: Buyer (user-A) previously placed a buy order at 0.60 for 5 shares.
+	// Locked: 0.60 * 5 = 3.00
+	seedUser(userRepo, &domain.User{
+		ID:            "user-A",
+		WalletAddress: "0xAAA",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(97), // 100 - 3.00 locked
+		LockedBalance: decimal.NewFromFloat(3.00),
+		CreatedAt:     time.Now(),
+	})
+	makerBuyOrder := &domain.Order{
+		ID:        "buy-order-1",
+		UserID:    "user-A",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideBuy,
+		Price:     decimal.NewFromFloat(0.60),
+		Quantity:  decimal.NewFromInt(5),
+		FilledQty: decimal.Zero,
+		Status:    domain.OrderStatusOpen,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	seedOrder(orderRepo, makerBuyOrder)
+
+	// Setup: Seller (user-B) with position of 20 shares.
+	seedUser(userRepo, &domain.User{
+		ID:            "user-B",
+		WalletAddress: "0xBBB",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(50),
+		LockedBalance: decimal.Zero,
+		CreatedAt:     time.Now(),
+	})
+	seedPosition(positionRepo, &domain.Position{
+		ID:        "pos-B",
+		UserID:    "user-B",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Quantity:  decimal.NewFromInt(20),
+		AvgPrice:  decimal.NewFromFloat(0.40),
+		UpdatedAt: time.Now(),
+	})
+
+	// Configure mock engine: sell matches the resting buy at 0.60.
+	tradePrice := decimal.NewFromFloat(0.60) // maker price
+	tradeQty := decimal.NewFromInt(5)
+	engine.matchResult = &MatchResult{
+		Trades: []*domain.Trade{
+			{
+				ID:           "trade-2",
+				MarketID:     "market-1",
+				OutcomeID:    "o-yes",
+				MakerOrderID: "buy-order-1",
+				TakerOrderID: "",
+				MakerUserID:  "user-A",
+				TakerUserID:  "user-B",
+				Price:        tradePrice,
+				Quantity:     tradeQty,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+
+	// Action: Seller places sell order at 0.50 for 5 shares.
+	sellPrice := decimal.NewFromFloat(0.50)
+	order, trades, err := svc.PlaceOrder(ctx, PlaceOrderRequest{
+		UserID:    "user-B",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideSell,
+		Price:     sellPrice,
+		Quantity:  tradeQty,
+	})
+	require.NoError(t, err)
+
+	// Assert: Order is fully filled.
+	assert.Equal(t, domain.OrderStatusFilled, order.Status)
+	assert.Len(t, trades, 1)
+
+	// Assert: Trade persisted.
+	tradeRepo.mu.RLock()
+	assert.Len(t, tradeRepo.trades, 1)
+	tradeRepo.mu.RUnlock()
+
+	// Assert: Seller (user-B, taker) receives proceeds.
+	// Position was reduced by 5 at order creation (20 → 15).
+	// Proceeds: 0.60 * 5 = 3.00
+	seller, err := userRepo.GetByID(ctx, "user-B")
+	require.NoError(t, err)
+	assert.True(t, seller.Balance.Equal(decimal.NewFromInt(53)),
+		"seller balance should be 53 (50 + 3 proceeds), got: %s", seller.Balance)
+
+	// Assert: Seller position reduced (done at order creation).
+	sellerPos, err := positionRepo.GetByUserAndOutcome(ctx, "user-B", "o-yes")
+	require.NoError(t, err)
+	assert.True(t, sellerPos.Quantity.Equal(decimal.NewFromInt(15)),
+		"seller position should be 15 (20 - 5 locked for sell), got: %s", sellerPos.Quantity)
+
+	// Assert: Buyer (user-A, maker) balance updated.
+	// Locked was 3.00, now trade uses 0.60 * 5 = 3.00 → locked = 0
+	buyer, err := userRepo.GetByID(ctx, "user-A")
+	require.NoError(t, err)
+	assert.True(t, buyer.Balance.Equal(decimal.NewFromInt(97)),
+		"buyer balance should remain 97, got: %s", buyer.Balance)
+	assert.True(t, buyer.LockedBalance.Equal(decimal.Zero),
+		"buyer locked should be 0 (3.00 - 3.00), got: %s", buyer.LockedBalance)
+
+	// Assert: Buyer (user-A) gets position.
+	buyerPos, err := positionRepo.GetByUserAndOutcome(ctx, "user-A", "o-yes")
+	require.NoError(t, err)
+	assert.True(t, buyerPos.Quantity.Equal(tradeQty),
+		"buyer should have 5 shares, got: %s", buyerPos.Quantity)
+
+	// Assert: Maker buy order status updated.
+	makerOrderDB, err := orderRepo.GetByID(ctx, "buy-order-1")
+	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusFilled, makerOrderDB.Status)
+}
+
+// ---------------------------------------------------------------------------
+// Tests: PlaceOrder -- Partial fill settlement
+// ---------------------------------------------------------------------------
+
+func TestPlaceOrder_PartialFill_SettlementCorrect(t *testing.T) {
+	svc, orderRepo, userRepo, positionRepo, tradeRepo, _, engine := newTestOrderService()
+	ctx := context.Background()
+
+	// Setup: Seller has a sell order for 5 shares at 0.60.
+	seedUser(userRepo, &domain.User{
+		ID:            "user-seller",
+		WalletAddress: "0xSEL",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(40),
+		LockedBalance: decimal.Zero,
+		CreatedAt:     time.Now(),
+	})
+	seedOrder(orderRepo, &domain.Order{
+		ID:        "sell-5",
+		UserID:    "user-seller",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideSell,
+		Price:     decimal.NewFromFloat(0.60),
+		Quantity:  decimal.NewFromInt(5),
+		FilledQty: decimal.Zero,
+		Status:    domain.OrderStatusOpen,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+
+	// Setup: Buyer with balance 100.
+	seedUser(userRepo, &domain.User{
+		ID:            "user-buyer",
+		WalletAddress: "0xBUY",
+		UserType:      domain.UserTypeHuman,
+		Balance:       decimal.NewFromInt(100),
+		LockedBalance: decimal.Zero,
+		CreatedAt:     time.Now(),
+	})
+
+	// Engine: buy 10 only matches 5 (partial fill).
+	tradeQty := decimal.NewFromInt(5)
+	engine.matchResult = &MatchResult{
+		Trades: []*domain.Trade{
+			{
+				ID:           "trade-partial",
+				MarketID:     "market-1",
+				OutcomeID:    "o-yes",
+				MakerOrderID: "sell-5",
+				TakerOrderID: "",
+				MakerUserID:  "user-seller",
+				TakerUserID:  "user-buyer",
+				Price:        decimal.NewFromFloat(0.60),
+				Quantity:     tradeQty,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+
+	// Action: Buyer places buy order at 0.70 for 10 shares (only 5 match).
+	buyPrice := decimal.NewFromFloat(0.70)
+	buyQty := decimal.NewFromInt(10)
+	order, trades, err := svc.PlaceOrder(ctx, PlaceOrderRequest{
+		UserID:    "user-buyer",
+		MarketID:  "market-1",
+		OutcomeID: "o-yes",
+		Side:      domain.OrderSideBuy,
+		Price:     buyPrice,
+		Quantity:  buyQty,
+	})
+	require.NoError(t, err)
+
+	// Assert: Order is partially filled.
+	assert.Equal(t, domain.OrderStatusPartial, order.Status)
+	assert.True(t, order.FilledQty.Equal(tradeQty))
+	assert.Len(t, trades, 1)
+
+	// Assert: Trade persisted.
+	tradeRepo.mu.RLock()
+	assert.Len(t, tradeRepo.trades, 1)
+	tradeRepo.mu.RUnlock()
+
+	// Assert: Buyer balance.
+	// Locked at order creation: 0.70 * 10 = 7.00 (full order amount)
+	// Balance after lock: 100 - 7.00 = 93.00
+	// Settlement for filled 5: refund (0.70-0.60)*5 = 0.50, release locked 0.70*5 = 3.50
+	// Balance: 93.00 + 0.50 = 93.50
+	// Locked: 7.00 - 3.50 = 3.50 (remaining for unfilled 5 shares)
+	buyer, err := userRepo.GetByID(ctx, "user-buyer")
+	require.NoError(t, err)
+	assert.True(t, buyer.Balance.Equal(decimal.NewFromFloat(93.50)),
+		"buyer balance should be 93.50, got: %s", buyer.Balance)
+	assert.True(t, buyer.LockedBalance.Equal(decimal.NewFromFloat(3.50)),
+		"buyer locked should be 3.50 (for remaining 5 shares), got: %s", buyer.LockedBalance)
+
+	// Assert: Buyer gets position for filled shares.
+	buyerPos, err := positionRepo.GetByUserAndOutcome(ctx, "user-buyer", "o-yes")
+	require.NoError(t, err)
+	assert.True(t, buyerPos.Quantity.Equal(tradeQty),
+		"buyer should have 5 shares, got: %s", buyerPos.Quantity)
+
+	// Assert: Seller receives proceeds.
+	seller, err := userRepo.GetByID(ctx, "user-seller")
+	require.NoError(t, err)
+	assert.True(t, seller.Balance.Equal(decimal.NewFromInt(43)),
+		"seller balance should be 43 (40 + 3 proceeds), got: %s", seller.Balance)
+
+	// Assert: Taker order persisted with partial status.
+	takerDB, err := orderRepo.GetByID(ctx, order.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusPartial, takerDB.Status)
+	assert.True(t, takerDB.FilledQty.Equal(tradeQty))
 }

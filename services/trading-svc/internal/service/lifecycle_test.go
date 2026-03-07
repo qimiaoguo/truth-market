@@ -128,7 +128,6 @@ func TestFullMarketLifecycle(t *testing.T) {
 	// -----------------------------------------------------------------------
 	tradePrice := decimal.NewFromFloat(0.60)
 	tradeQty := decimal.NewFromInt(50)
-	tradeCost := tradePrice.Mul(tradeQty) // 30
 
 	// Configure the engine to return a trade result when the buy order arrives.
 	engine.mu.Lock()
@@ -169,46 +168,17 @@ func TestFullMarketLifecycle(t *testing.T) {
 	assert.True(t, buyTrades[0].Quantity.Equal(tradeQty),
 		"trade quantity should be 50, got: %s", buyTrades[0].Quantity)
 
-	// Simulate settlement: mark the matched orders as filled in the order repo.
-	// In production this would be done by the matching/settlement layer after
-	// the trade executes. PlaceOrder itself only locks funds/positions and
-	// returns the trades from the engine; it does not update order status.
-	err = orderRepo.UpdateStatus(ctx, sellOrder.ID, domain.OrderStatusFilled, tradeQty)
+	// Settlement is now handled automatically by PlaceOrder.
+	// Verify orders are settled correctly.
+	settledSellOrder, err := orderRepo.GetByID(ctx, sellOrder.ID)
 	require.NoError(t, err)
-	err = orderRepo.UpdateStatus(ctx, buyOrder.ID, domain.OrderStatusFilled, tradeQty)
-	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusFilled, settledSellOrder.Status,
+		"sell order should be filled after match")
 
-	// Simulate settlement: credit seller (user-1) with sale proceeds,
-	// release buyer (user-2) locked funds.
-	// Seller receives: tradeQty * tradePrice = 50 * 0.60 = 30 U.
-	user1PostTrade, err := userRepo.GetByID(ctx, "user-1")
+	settledBuyOrder, err := orderRepo.GetByID(ctx, buyOrder.ID)
 	require.NoError(t, err)
-	err = userRepo.UpdateBalance(ctx, "user-1",
-		user1PostTrade.Balance.Add(tradeCost),    // 900 + 30 = 930
-		user1PostTrade.LockedBalance,              // unchanged
-	)
-	require.NoError(t, err)
-
-	// Buyer: locked funds become spent (reduce locked, no balance change).
-	user2PostTrade, err := userRepo.GetByID(ctx, "user-2")
-	require.NoError(t, err)
-	err = userRepo.UpdateBalance(ctx, "user-2",
-		user2PostTrade.Balance,                           // 970
-		user2PostTrade.LockedBalance.Sub(tradeCost),      // 30 - 30 = 0
-	)
-	require.NoError(t, err)
-
-	// Grant buyer the Yes position.
-	err = positionRepo.Upsert(ctx, &domain.Position{
-		ID:        "pos-buyer-yes",
-		UserID:    "user-2",
-		MarketID:  "market-1",
-		OutcomeID: "o-yes",
-		Quantity:  tradeQty,       // 50 Yes tokens
-		AvgPrice:  tradePrice,
-		UpdatedAt: time.Now(),
-	})
-	require.NoError(t, err)
+	assert.Equal(t, domain.OrderStatusFilled, settledBuyOrder.Status,
+		"buy order should be filled after match")
 
 	// -----------------------------------------------------------------------
 	// Step 6: Verify state after the match and settlement.
@@ -381,8 +351,8 @@ func TestFullMarketLifecycle(t *testing.T) {
 
 	// Verify trade repo has recorded the trade from the match.
 	tradeRepo.mu.RLock()
-	assert.Len(t, tradeRepo.trades, 0,
-		"trade repo should have 0 trades (trades are returned but not persisted by PlaceOrder)")
+	assert.Len(t, tradeRepo.trades, 1,
+		"trade repo should have 1 trade (persisted by PlaceOrder settlement)")
 	assert.Len(t, tradeRepo.mintTxs, 1,
 		"trade repo should have 1 mint transaction")
 	tradeRepo.mu.RUnlock()

@@ -28,7 +28,7 @@ const (
 	// OrderStatusOpen indicates the order is on the book and waiting to be matched.
 	OrderStatusOpen OrderStatus = "open"
 	// OrderStatusPartial indicates the order has been partially filled.
-	OrderStatusPartial OrderStatus = "partial"
+	OrderStatusPartial OrderStatus = "partially_filled"
 	// OrderStatusFilled indicates the order has been completely filled.
 	OrderStatusFilled OrderStatus = "filled"
 	// OrderStatusCancelled indicates the order has been cancelled by the user or system.

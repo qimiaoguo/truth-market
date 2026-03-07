@@ -1,6 +1,7 @@
 .PHONY: all lint test test-all test-infra test-services test-pact test-bench \
-        coverage proto openapi-lint openapi-bundle docs-dev docker-up docker-down \
-        docker-test-up docker-test-down migrate ci clean build
+        test-trading-integration coverage proto openapi-lint openapi-bundle \
+        docs-dev docker-up docker-down docker-test-up docker-test-down \
+        dev dev-down dev-reset migrate ci clean build
 
 # Variables
 MODULES = pkg infra services/gateway services/auth-svc services/market-svc services/trading-svc services/ranking-svc
@@ -88,6 +89,10 @@ test-bench:
 	@echo "==> Running benchmark tests..."
 	@(cd services/trading-svc && go test ./internal/matching/... -bench=. -benchmem -run=^$$)
 
+test-trading-integration:
+	@echo "==> Running trading integration tests (requires Docker)..."
+	@(cd services/trading-svc && go test ./internal/service/ -v -race -count=1 -run TestIntegration)
+
 # ──────────────────────────────────────────────────
 # Coverage
 # ──────────────────────────────────────────────────
@@ -158,6 +163,26 @@ docker-test-up:
 docker-test-down:
 	@echo "==> Stopping test environment..."
 	docker compose -f docker-compose.test.yml down
+
+# ──────────────────────────────────────────────────
+# Local Dev (no image build)
+# ──────────────────────────────────────────────────
+
+dev:
+	@bash scripts/dev.sh
+
+dev-reset:
+	@bash scripts/dev.sh --reset
+
+dev-down:
+	@docker compose -f docker-compose.dev.yml down
+	@pkill -f "go run.*truth-market" 2>/dev/null || true
+	@echo "==> Dev environment stopped (data preserved in volume)."
+
+dev-destroy:
+	@docker compose -f docker-compose.dev.yml down -v
+	@pkill -f "go run.*truth-market" 2>/dev/null || true
+	@echo "==> Dev environment destroyed (volumes removed)."
 
 # ──────────────────────────────────────────────────
 # Migrate

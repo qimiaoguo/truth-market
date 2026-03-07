@@ -9,9 +9,18 @@ import { wagmiConfig } from '@/lib/wagmi'
 
 function AuthSync() {
   const token = useAuthStore((s) => s.token)
+  const updateUser = useAuthStore((s) => s.updateUser)
   useEffect(() => {
     api.setToken(token)
-  }, [token])
+    // Refresh user data (balance, etc.) from server on page load.
+    if (token) {
+      api.getMe().then((res) => {
+        if (res.ok && res.data) {
+          updateUser(res.data)
+        }
+      }).catch(() => {})
+    }
+  }, [token, updateUser])
   return null
 }
 

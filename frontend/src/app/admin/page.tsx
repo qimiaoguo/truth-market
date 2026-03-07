@@ -35,6 +35,26 @@ export default function AdminPage() {
   const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('')
   const [resolveSuccess, setResolveSuccess] = useState(false)
 
+  // Fetch draft markets
+  const { data: draftMarkets, isLoading: draftLoading } = useQuery({
+    queryKey: ['markets', 'draft'],
+    queryFn: async () => {
+      const res = await api.listMarkets({ status: 'draft' })
+      return res.data?.markets ?? []
+    },
+    enabled: !!user?.is_admin,
+  })
+
+  // Fetch open markets (for closing)
+  const { data: openMarkets, isLoading: openLoading } = useQuery({
+    queryKey: ['markets', 'open'],
+    queryFn: async () => {
+      const res = await api.listMarkets({ status: 'open' })
+      return res.data?.markets ?? []
+    },
+    enabled: !!user?.is_admin,
+  })
+
   // Fetch closed markets
   const { data: closedMarkets, isLoading: marketsLoading } = useQuery({
     queryKey: ['markets', 'closed'],
@@ -68,6 +88,16 @@ export default function AdminPage() {
       setShowCreateForm(false)
       queryClient.invalidateQueries({ queryKey: ['markets'] })
       setTimeout(() => setCreateSuccess(false), 5000)
+    },
+  })
+
+  // Update market status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return api.updateMarketStatus(id, status)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['markets'] })
     },
   })
 
@@ -236,6 +266,76 @@ export default function AdminPage() {
               </form>
             </div>
           )}
+        </section>
+
+        {/* Draft Markets Section */}
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold text-neutral-800 mb-4">Draft Markets</h2>
+          <div className="bg-card rounded-xl border border-card-border shadow-sm">
+            {draftLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-neutral-500">Loading...</p>
+              </div>
+            ) : !draftMarkets || draftMarkets.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-neutral-500">No draft markets.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-neutral-100">
+                {draftMarkets.map((market) => (
+                  <div key={market.id} className="p-4 flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-neutral-900 truncate">{market.title}</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">{market.category}</p>
+                    </div>
+                    <button
+                      onClick={() => updateStatusMutation.mutate({ id: market.id, status: 'open' })}
+                      disabled={updateStatusMutation.isPending}
+                      className="ml-4 px-3 py-1.5 text-sm bg-success-600 text-white rounded-lg font-medium hover:bg-success-700 transition-colors disabled:opacity-50"
+                    >
+                      Open
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Open Markets Section */}
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold text-neutral-800 mb-4">Open Markets</h2>
+          <div className="bg-card rounded-xl border border-card-border shadow-sm">
+            {openLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-neutral-500">Loading...</p>
+              </div>
+            ) : !openMarkets || openMarkets.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-neutral-500">No open markets.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-neutral-100">
+                {openMarkets.map((market) => (
+                  <div key={market.id} className="p-4 flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-neutral-900 truncate">{market.title}</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        {market.category} &middot; Volume: {market.volume}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => updateStatusMutation.mutate({ id: market.id, status: 'closed' })}
+                      disabled={updateStatusMutation.isPending}
+                      className="ml-4 px-3 py-1.5 text-sm bg-warning-600 text-white rounded-lg font-medium hover:bg-warning-700 transition-colors disabled:opacity-50"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Closed Markets Section */}

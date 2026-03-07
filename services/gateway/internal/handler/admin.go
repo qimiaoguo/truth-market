@@ -158,7 +158,7 @@ func (h *AdminHandler) ResolveMarket(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.marketClient.ResolveMarket(c.Request.Context(), &marketv1.ResolveMarketRequest{
+	_, err := h.marketClient.ResolveMarket(c.Request.Context(), &marketv1.ResolveMarketRequest{
 		MarketId:         marketID,
 		WinningOutcomeId: req.WinningOutcomeID,
 	})
@@ -167,7 +167,82 @@ func (h *AdminHandler) ResolveMarket(c *gin.Context) {
 		return
 	}
 
-	mr := protoMarketToResponse(resp.GetMarket())
+	// Fetch the updated market to return it (gRPC response is empty).
+	getResp, err := h.marketClient.GetMarket(c.Request.Context(), &marketv1.GetMarketRequest{
+		MarketId: marketID,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	mr := protoMarketToResponse(getResp.GetMarket())
+	data, _ := json.Marshal(mr)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"data": json.RawMessage(data),
+	})
+}
+
+// updateMarketStatusRequest is the expected JSON body for UpdateMarketStatus.
+type updateMarketStatusRequest struct {
+	Status string `json:"status"`
+}
+
+// UpdateMarketStatus handles POST /api/v1/admin/markets/:id/status.
+func (h *AdminHandler) UpdateMarketStatus(c *gin.Context) {
+	if !requireAdmin(c) {
+		return
+	}
+
+	marketID := c.Param("id")
+
+	var req updateMarketStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errMsg := "invalid request body"
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	// Map string status to proto enum.
+	statusMap := map[string]marketv1.MarketStatus{
+		"open":      marketv1.MarketStatus_MARKET_STATUS_OPEN,
+		"closed":    marketv1.MarketStatus_MARKET_STATUS_CLOSED,
+		"cancelled": marketv1.MarketStatus_MARKET_STATUS_CANCELLED,
+	}
+	protoStatus, ok := statusMap[req.Status]
+	if !ok {
+		errMsg := "invalid status: must be one of open, closed, cancelled"
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": &errMsg,
+		})
+		return
+	}
+
+	_, err := h.marketClient.UpdateMarketStatus(c.Request.Context(), &marketv1.UpdateMarketStatusRequest{
+		MarketId: marketID,
+		Status:   protoStatus,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	// Fetch the updated market to return it.
+	getResp, err := h.marketClient.GetMarket(c.Request.Context(), &marketv1.GetMarketRequest{
+		MarketId: marketID,
+	})
+	if err != nil {
+		handleGRPCError(c, err)
+		return
+	}
+
+	mr := protoMarketToResponse(getResp.GetMarket())
 	data, _ := json.Marshal(mr)
 
 	c.JSON(http.StatusOK, gin.H{

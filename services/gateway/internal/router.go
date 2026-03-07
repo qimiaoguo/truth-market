@@ -117,6 +117,7 @@ func SetupRouter(
 		admin.Use(authMW)
 		{
 			admin.POST("/markets", adminHandler.CreateMarket)
+			admin.POST("/markets/:id/status", adminHandler.UpdateMarketStatus)
 			admin.POST("/markets/:id/resolve", adminHandler.ResolveMarket)
 			admin.POST("/agent-users", adminHandler.CreateAgentUser)
 		}

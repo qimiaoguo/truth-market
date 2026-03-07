@@ -107,13 +107,16 @@ func main() {
 
 	// ---------- Domain Services ----------
 	marketService := service.NewMarketService(marketRepo, outcomeRepo, txManager)
-	_ = service.NewSettlementService(
+	settlementService := service.NewSettlementService(
 		marketRepo, outcomeRepo, positionRepo, userRepo,
 		orderCanceller, txManager, eventBus,
 	)
 
 	// ---------- gRPC Server ----------
-	marketServer := marketgrpc.NewMarketServer(&marketServiceAdapter{svc: marketService})
+	marketServer := marketgrpc.NewMarketServer(&marketServiceAdapter{
+		svc:        marketService,
+		settlement: settlementService,
+	})
 
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelmw.GRPCServerHandler()),
@@ -168,7 +171,8 @@ func (c *tradingOrderCanceller) CancelAllOrdersByMarket(ctx context.Context, mar
 // marketServiceAdapter bridges service.MarketService to the
 // grpc.MarketServicer interface by converting the CreateMarketRequest type.
 type marketServiceAdapter struct {
-	svc *service.MarketService
+	svc        *service.MarketService
+	settlement *service.SettlementService
 }
 
 func (a *marketServiceAdapter) CreateMarket(ctx context.Context, req marketgrpc.CreateMarketRequest) (*domain.Market, error) {
@@ -196,5 +200,5 @@ func (a *marketServiceAdapter) UpdateMarketStatus(ctx context.Context, id string
 }
 
 func (a *marketServiceAdapter) ResolveMarket(ctx context.Context, marketID, winningOutcomeID string) error {
-	return a.svc.ResolveMarket(ctx, marketID, winningOutcomeID)
+	return a.settlement.ResolveMarket(ctx, marketID, winningOutcomeID)
 }

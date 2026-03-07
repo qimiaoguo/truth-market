@@ -145,6 +145,102 @@ func (s *OrderService) PlaceOrder(ctx context.Context, req PlaceOrderRequest) (*
 		}
 
 		trades = result.Trades
+
+		// Settle each trade: persist, update balances, positions, and order statuses.
+		for _, trade := range trades {
+			// 1. Persist the trade.
+			if err := s.tradeRepo.Create(ctx, trade); err != nil {
+				return err
+			}
+
+			// 2. Determine buyer and seller.
+			var buyerUserID, sellerUserID string
+			var buyerOrderPrice decimal.Decimal
+			if order.Side == domain.OrderSideBuy {
+				// Taker is buyer, maker is seller.
+				buyerUserID = trade.TakerUserID
+				sellerUserID = trade.MakerUserID
+				buyerOrderPrice = order.Price
+			} else {
+				// Taker is seller, maker is buyer.
+				// Trade executes at maker price, so trade.Price == maker's order price.
+				buyerUserID = trade.MakerUserID
+				sellerUserID = trade.TakerUserID
+				buyerOrderPrice = trade.Price
+			}
+
+			// 3. Buyer settlement: release locked funds, refund favorable price diff, create position.
+			buyerUser, err := s.userRepo.GetByID(ctx, buyerUserID)
+			if err != nil {
+				return err
+			}
+			lockedReduction := buyerOrderPrice.Mul(trade.Quantity)
+			refund := buyerOrderPrice.Sub(trade.Price).Mul(trade.Quantity)
+			newBuyerBalance := buyerUser.Balance.Add(refund)
+			newBuyerLocked := buyerUser.LockedBalance.Sub(lockedReduction)
+			if err := s.userRepo.UpdateBalance(ctx, buyerUserID, newBuyerBalance, newBuyerLocked); err != nil {
+				return err
+			}
+
+			// Create or update buyer's position.
+			buyerPos, err := s.positionRepo.GetByUserAndOutcome(ctx, buyerUserID, trade.OutcomeID)
+			if err != nil {
+				// Position doesn't exist yet — create a new one.
+				buyerPos = &domain.Position{
+					ID:        uuid.New().String(),
+					UserID:    buyerUserID,
+					MarketID:  trade.MarketID,
+					OutcomeID: trade.OutcomeID,
+					Quantity:  decimal.Zero,
+					AvgPrice:  decimal.Zero,
+					UpdatedAt: now,
+				}
+			}
+			// Update average price: weighted average.
+			totalCost := buyerPos.AvgPrice.Mul(buyerPos.Quantity).Add(trade.Price.Mul(trade.Quantity))
+			buyerPos.Quantity = buyerPos.Quantity.Add(trade.Quantity)
+			if buyerPos.Quantity.GreaterThan(decimal.Zero) {
+				buyerPos.AvgPrice = totalCost.Div(buyerPos.Quantity)
+			}
+			buyerPos.UpdatedAt = now
+			if err := s.positionRepo.Upsert(ctx, buyerPos); err != nil {
+				return err
+			}
+
+			// 4. Seller settlement: credit proceeds.
+			sellerUser, err := s.userRepo.GetByID(ctx, sellerUserID)
+			if err != nil {
+				return err
+			}
+			proceeds := trade.Price.Mul(trade.Quantity)
+			newSellerBalance := sellerUser.Balance.Add(proceeds)
+			if err := s.userRepo.UpdateBalance(ctx, sellerUserID, newSellerBalance, sellerUser.LockedBalance); err != nil {
+				return err
+			}
+
+			// 5. Update maker order status in DB.
+			// Look up the maker order to get its current filled qty from the engine.
+			makerOrder, err := s.orderRepo.GetByID(ctx, trade.MakerOrderID)
+			if err != nil {
+				return err
+			}
+			makerNewFilled := makerOrder.FilledQty.Add(trade.Quantity)
+			makerStatus := domain.OrderStatusPartial
+			if makerNewFilled.GreaterThanOrEqual(makerOrder.Quantity) {
+				makerStatus = domain.OrderStatusFilled
+			}
+			if err := s.orderRepo.UpdateStatus(ctx, trade.MakerOrderID, makerStatus, makerNewFilled); err != nil {
+				return err
+			}
+		}
+
+		// 6. Update taker order status in DB if it changed (partially or fully filled).
+		if order.FilledQty.GreaterThan(decimal.Zero) {
+			if err := s.orderRepo.UpdateStatus(ctx, order.ID, order.Status, order.FilledQty); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 

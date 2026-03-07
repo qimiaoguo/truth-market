@@ -67,7 +67,7 @@ class ApiClient {
   }
 
   async getMe() {
-    return this.get<{ user: User }>('/auth/me')
+    return this.get<User>('/auth/me')
   }
 
   // Markets
@@ -145,7 +145,7 @@ class ApiClient {
   }
 
   async updateMarketStatus(id: string, status: string) {
-    return this.put<{ market: Market }>(`/admin/markets/${id}/status`, { status })
+    return this.post<Market>(`/admin/markets/${id}/status`, { status })
   }
 
   async resolveMarket(id: string, winningOutcomeId: string) {

@@ -90,7 +90,7 @@ func (r *OrderRepo) ListOpenByMarket(ctx context.Context, marketID string) ([]*d
 		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
 		        filled_quantity, status, created_at, updated_at
 		 FROM orders
-		 WHERE market_id = $1 AND status IN ('open', 'partial')
+		 WHERE market_id = $1 AND status IN ('open', 'partially_filled')
 		 ORDER BY price DESC, created_at ASC`, marketID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list open orders by market: %w", err)
@@ -120,7 +120,7 @@ func (r *OrderRepo) ListAllOpen(ctx context.Context) ([]*domain.Order, error) {
 		`SELECT id, user_id, market_id, outcome_id, side, price, quantity,
 		        filled_quantity, status, created_at, updated_at
 		 FROM orders
-		 WHERE status IN ('open', 'partial')
+		 WHERE status IN ('open', 'partially_filled')
 		 ORDER BY market_id, outcome_id, created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list all open orders: %w", err)

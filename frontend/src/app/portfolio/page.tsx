@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/authStore'
 import { PositionTable } from '@/components/trading/PositionTable'
 import { OrderTable } from '@/components/trading/OrderTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Card } from '@/components/ui/Card'
 
 export default function PortfolioPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -22,49 +24,53 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-8 text-3xl font-bold text-white">Portfolio</h1>
+    <div>
+      <PageHeader title="Portfolio" gradient />
 
       {user && (
         <section className="mb-10">
-          <h2 className="mb-4 text-xl font-semibold text-gray-200">Balance</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500 mb-4">Balance</h2>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-              <div className="text-sm text-gray-400">Available</div>
-              <div className="mt-1 text-2xl font-bold tabular-nums text-white">
-                {Number(user.balance).toLocaleString()} U
+            <Card gradient>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Available</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-neutral-900">
+                  {Number(user.balance).toLocaleString()} U
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-              <div className="text-sm text-gray-400">In Open Orders</div>
-              <div className="mt-1 text-2xl font-bold tabular-nums text-yellow-400">
-                {Number(user.locked_balance).toLocaleString()} U
+            </Card>
+            <Card>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">In Open Orders</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-warning-600">
+                  {Number(user.locked_balance).toLocaleString()} U
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-              <div className="text-sm text-gray-400">Total</div>
-              <div className="mt-1 text-2xl font-bold tabular-nums text-white">
-                {(Number(user.balance) + Number(user.locked_balance)).toLocaleString()} U
+            </Card>
+            <Card>
+              <div className="p-5">
+                <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Total</div>
+                <div className="mt-2 text-2xl font-extrabold tabular-nums text-neutral-900">
+                  {(Number(user.balance) + Number(user.locked_balance)).toLocaleString()} U
+                </div>
               </div>
-            </div>
+            </Card>
           </div>
         </section>
       )}
 
       <section className="mb-10">
-        <h2 className="mb-4 text-xl font-semibold text-gray-200">Positions</h2>
-        <div className="rounded-lg border border-gray-800 bg-gray-900">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500 mb-4">Positions</h2>
+        <Card hover={false}>
           <PositionTable />
-        </div>
+        </Card>
       </section>
 
       <section>
-        <h2 className="mb-4 text-xl font-semibold text-gray-200">
-          Open Orders
-        </h2>
-        <div className="rounded-lg border border-gray-800 bg-gray-900">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500 mb-4">Open Orders</h2>
+        <Card hover={false}>
           <OrderTable />
-        </div>
+        </Card>
       </section>
     </div>
   )

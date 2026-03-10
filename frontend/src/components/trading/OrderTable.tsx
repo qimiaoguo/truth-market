@@ -4,6 +4,11 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useOrders } from '@/hooks/useOrders'
 import { api } from '@/lib/api'
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export function OrderTable() {
   const { data: orders, isLoading } = useOrders({ status: 'open' })
@@ -22,98 +27,85 @@ export function OrderTable() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-gray-400">
-        Loading orders...
+      <div className="p-4 space-y-2">
+        {[...Array(3)].map((_, i) => (
+          <Skeleton key={i} variant="table-row" />
+        ))}
       </div>
     )
   }
 
   if (!orders || orders.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-gray-500">
-        No open orders
-      </div>
+      <EmptyState
+        title="No open orders"
+        description="Your active orders will appear here."
+      />
     )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-gray-700 text-gray-400">
-            <th className="px-4 py-3 font-medium">Market</th>
-            <th className="px-4 py-3 font-medium">Side</th>
-            <th className="px-4 py-3 font-medium text-right">Price</th>
-            <th className="px-4 py-3 font-medium text-right">Quantity</th>
-            <th className="px-4 py-3 font-medium text-right">Filled</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr
-              key={order.id}
-              className="border-b border-gray-800 text-gray-200 hover:bg-gray-800/50 transition-colors"
-            >
-              <td className="px-4 py-3 font-medium">{order.market_id}</td>
-              <td className="px-4 py-3">
-                <span
-                  className={
-                    order.side === 'buy'
-                      ? 'text-green-400 font-medium'
-                      : 'text-red-400 font-medium'
-                  }
-                >
-                  {order.side.toUpperCase()}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {order.price}
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {order.quantity}
-              </td>
-              <td className="px-4 py-3 text-right tabular-nums">
-                {order.filled_quantity}
-              </td>
-              <td className="px-4 py-3">
-                <span className="rounded-full bg-gray-700 px-2 py-0.5 text-xs text-gray-300">
-                  {order.status}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-right">
-                {cancelledIds.has(order.id) ? (
-                  <span className="text-sm text-gray-400">Cancelled</span>
-                ) : confirmingId === order.id ? (
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => cancelMutation.mutate(order.id)}
-                      disabled={cancelMutation.isPending}
-                      className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-                    >
-                      {cancelMutation.isPending ? 'Cancelling...' : 'Confirm'}
-                    </button>
-                    <button
-                      onClick={() => setConfirmingId(null)}
-                      className="rounded bg-gray-700 px-3 py-1 text-xs font-medium text-gray-300 hover:bg-gray-600 transition-colors"
-                    >
-                      Back
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmingId(order.id)}
-                    className="rounded bg-gray-700 px-3 py-1 text-xs font-medium text-gray-300 hover:bg-gray-600 transition-colors"
+    <Table>
+      <Thead>
+        <Tr>
+          <Th>Market</Th>
+          <Th>Side</Th>
+          <Th className="text-right">Price</Th>
+          <Th className="text-right">Quantity</Th>
+          <Th className="text-right">Filled</Th>
+          <Th>Status</Th>
+          <Th className="text-right">Actions</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {orders.map((order) => (
+          <Tr key={order.id}>
+            <Td className="font-semibold">{order.market_id}</Td>
+            <Td>
+              <Badge variant={order.side === 'buy' ? 'success' : 'danger'}>
+                {order.side.toUpperCase()}
+              </Badge>
+            </Td>
+            <Td className="text-right">{order.price}</Td>
+            <Td className="text-right">{order.quantity}</Td>
+            <Td className="text-right">{order.filled_quantity}</Td>
+            <Td>
+              <Badge variant="neutral">{order.status}</Badge>
+            </Td>
+            <Td className="text-right">
+              {cancelledIds.has(order.id) ? (
+                <span className="text-sm text-neutral-400">Cancelled</span>
+              ) : confirmingId === order.id ? (
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    loading={cancelMutation.isPending}
+                    onClick={() => cancelMutation.mutate(order.id)}
                   >
-                    Cancel
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                    Confirm
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setConfirmingId(null)}
+                  >
+                    Back
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmingId(order.id)}
+                >
+                  Cancel
+                </Button>
+              )}
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   )
 }

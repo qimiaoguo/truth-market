@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import RankingTable from '@/components/ranking/RankingTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Tabs } from '@/components/ui/Tabs'
+import { Card } from '@/components/ui/Card'
 import type { RankDimension } from '@/lib/types'
 
-const dimensions: { key: RankDimension; label: string }[] = [
+const dimensions: { key: string; label: string }[] = [
   { key: 'total_assets', label: 'Total Assets' },
   { key: 'pnl', label: 'PnL' },
   { key: 'volume', label: 'Volume' },
@@ -23,55 +26,39 @@ export default function RankingsPage() {
   const [selectedUserType, setSelectedUserType] = useState<string | undefined>(undefined)
 
   return (
-    <div className="min-h-screen bg-surface">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-neutral-900 mb-8">Leaderboard</h1>
+    <div>
+      <PageHeader title="Leaderboard" gradient />
 
-        {/* Dimension Tabs */}
-        <div className="mb-6" role="tablist" aria-label="Ranking dimensions">
-          <div className="flex border-b border-neutral-200">
-            {dimensions.map((dim) => (
-              <button
-                key={dim.key}
-                role="tab"
-                aria-selected={selectedDimension === dim.key}
-                onClick={() => setSelectedDimension(dim.key)}
-                className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
-                  selectedDimension === dim.key
-                    ? 'text-primary-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-600'
-                    : 'text-neutral-500 hover:text-neutral-700'
-                }`}
-              >
-                {dim.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Dimension Tabs */}
+      <Tabs
+        tabs={dimensions}
+        activeKey={selectedDimension}
+        onChange={(key) => setSelectedDimension(key as RankDimension)}
+        className="mb-6"
+      />
 
-        {/* User Type Filter */}
-        <div className="mb-6 flex items-center gap-2">
-          <span className="text-sm text-neutral-500 mr-2">Filter:</span>
-          {userTypes.map((ut) => (
-            <button
-              key={ut.label}
-              role="button"
-              onClick={() => setSelectedUserType(ut.key)}
-              className={`px-3.5 py-1.5 text-sm rounded-full font-medium transition-colors ${
-                selectedUserType === ut.key
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-              }`}
-            >
-              {ut.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Rankings Table */}
-        <div className="bg-card rounded-xl border border-card-border shadow-sm">
-          <RankingTable dimension={selectedDimension} userType={selectedUserType} />
-        </div>
+      {/* User Type Filter */}
+      <div className="mb-6 flex items-center gap-2">
+        <span className="text-sm font-semibold text-neutral-500 mr-2">Filter:</span>
+        {userTypes.map((ut) => (
+          <button
+            key={ut.label}
+            onClick={() => setSelectedUserType(ut.key)}
+            className={`px-3.5 py-1.5 text-sm rounded-full font-bold transition-all duration-200 cursor-pointer ${
+              selectedUserType === ut.key
+                ? 'gradient-primary text-white shadow-sm'
+                : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+            }`}
+          >
+            {ut.label}
+          </button>
+        ))}
       </div>
+
+      {/* Rankings Table */}
+      <Card hover={false}>
+        <RankingTable dimension={selectedDimension} userType={selectedUserType} />
+      </Card>
     </div>
   )
 }

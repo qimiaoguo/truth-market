@@ -1,6 +1,10 @@
 'use client'
 
 import { useRankings } from '@/hooks/useRankings'
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table'
+import { Badge } from '@/components/ui/Badge'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
 import type { RankDimension } from '@/lib/types'
 
 interface RankingTableProps {
@@ -35,87 +39,82 @@ function truncateAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
 
+const rankStyles: Record<number, string> = {
+  1: 'bg-warning-100 text-warning-700 ring-1 ring-warning-300',
+  2: 'bg-neutral-200 text-neutral-700 ring-1 ring-neutral-300',
+  3: 'bg-accent-100 text-accent-700 ring-1 ring-accent-300',
+}
+
 export default function RankingTable({ dimension, userType }: RankingTableProps) {
   const { data: rankings, isLoading, error } = useRankings(dimension, userType)
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-neutral-500">Loading rankings...</div>
+      <div className="p-4 space-y-2">
+        {[...Array(5)].map((_, i) => (
+          <Skeleton key={i} variant="table-row" />
+        ))}
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-danger-500">Failed to load rankings.</div>
-      </div>
+      <EmptyState
+        title="Failed to load rankings"
+        description="Something went wrong. Please try again later."
+      />
     )
   }
 
   if (!rankings || rankings.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-neutral-500">No rankings available yet.</div>
-      </div>
+      <EmptyState
+        title="No rankings available"
+        description="Rankings will appear once users start trading."
+      />
     )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-b border-neutral-200 text-left text-sm font-medium text-neutral-500">
-            <th className="py-3 pr-4 pl-4 w-16">Rank</th>
-            <th className="py-3 pr-4">Wallet Address</th>
-            <th className="py-3 pr-4 w-24">Type</th>
-            <th className="py-3 pr-4 pl-4 text-right w-40">{dimensionLabels[dimension]}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rankings.map((ranking) => (
-            <tr
-              key={`${ranking.user_id}-${ranking.dimension}`}
-              data-testid="ranking-row"
-              className="border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
-            >
-              <td className="py-3 pr-4 pl-4">
-                <span
-                  className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold ${
-                    ranking.rank === 1
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : ranking.rank === 2
-                        ? 'bg-neutral-200 text-neutral-700'
-                        : ranking.rank === 3
-                          ? 'bg-orange-100 text-orange-800'
-                          : 'bg-neutral-100 text-neutral-600'
-                  }`}
-                >
-                  {ranking.rank}
-                </span>
-              </td>
-              <td className="py-3 pr-4 font-mono text-sm">
-                {truncateAddress(ranking.wallet_address)}
-              </td>
-              <td className="py-3 pr-4">
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    ranking.user_type === 'agent'
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'bg-success-100 text-success-700'
-                  }`}
-                >
-                  {ranking.user_type === 'agent' ? 'Agent' : 'Human'}
-                </span>
-              </td>
-              <td className="py-3 pr-4 pl-4 text-right font-medium tabular-nums">
-                {formatValue(dimension, ranking.value)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table>
+      <Thead>
+        <Tr>
+          <Th className="w-16">Rank</Th>
+          <Th>Wallet Address</Th>
+          <Th className="w-24">Type</Th>
+          <Th className="text-right w-40">{dimensionLabels[dimension]}</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {rankings.map((ranking) => (
+          <Tr
+            key={`${ranking.user_id}-${ranking.dimension}`}
+            data-testid="ranking-row"
+          >
+            <Td>
+              <span
+                className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                  rankStyles[ranking.rank] || 'bg-neutral-100 text-neutral-500'
+                }`}
+              >
+                {ranking.rank}
+              </span>
+            </Td>
+            <Td className="font-mono text-sm">
+              {truncateAddress(ranking.wallet_address)}
+            </Td>
+            <Td>
+              <Badge variant={ranking.user_type === 'agent' ? 'accent' : 'success'}>
+                {ranking.user_type === 'agent' ? 'Agent' : 'Human'}
+              </Badge>
+            </Td>
+            <Td className="text-right font-bold">
+              {formatValue(dimension, ranking.value)}
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   )
 }

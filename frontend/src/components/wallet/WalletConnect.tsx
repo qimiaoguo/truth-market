@@ -2,15 +2,55 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useConnect, useDisconnect, useSignMessage } from 'wagmi'
-import { injected } from 'wagmi/connectors'
 import { useAuthStore } from '@/stores/authStore'
 import { api } from '@/lib/api'
 import type { User } from '@/lib/types'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
+
+/** Known wallet metadata for nice display */
+const WALLET_META: Record<string, { name: string; icon: string }> = {
+  'io.metamask': {
+    name: 'MetaMask',
+    icon: '🦊',
+  },
+  metaMaskSDK: {
+    name: 'MetaMask',
+    icon: '🦊',
+  },
+  'app.phantom': {
+    name: 'Phantom',
+    icon: '👻',
+  },
+  coinbaseWalletSDK: {
+    name: 'Coinbase Wallet',
+    icon: '🔵',
+  },
+  walletConnect: {
+    name: 'WalletConnect',
+    icon: '🔗',
+  },
+  injected: {
+    name: 'Browser Wallet',
+    icon: '🌐',
+  },
+}
+
+function getWalletDisplay(connector: { id: string; name: string }) {
+  const meta = WALLET_META[connector.id]
+  return {
+    name: meta?.name || connector.name || connector.id,
+    icon: meta?.icon || '💳',
+  }
+}
 
 export function WalletConnect() {
   const { isAuthenticated, user, setAuth, clearAuth } = useAuthStore()
   const [authenticating, setAuthenticating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showWalletModal, setShowWalletModal] = useState(false)
+  const [connectingId, setConnectingId] = useState<string | null>(null)
 
   const { address, isConnected } = useAccount()
   const { connectAsync, connectors } = useConnect()
@@ -81,26 +121,23 @@ export function WalletConnect() {
     }
   }, [isConnected, address, isAuthenticated, authenticating, authenticateWithBackend])
 
-  const handleConnect = async () => {
+  const handleConnectWallet = async (connector: (typeof connectors)[number]) => {
     setError(null)
+    setConnectingId(connector.id)
     try {
-      // Try injected connector (MetaMask, etc.)
-      const injectedConnector = connectors.find(c => c.id === 'injected') || connectors[0]
-      if (injectedConnector) {
-        await connectAsync({ connector: injectedConnector })
-      } else {
-        // Fallback: try injected directly
-        await connectAsync({ connector: injected() })
-      }
+      await connectAsync({ connector })
+      setShowWalletModal(false)
     } catch (err) {
       console.error('Connect error:', err)
-      // If no wallet found, use mock for demo
-      await handleMockConnect()
+      setError('Failed to connect wallet')
+    } finally {
+      setConnectingId(null)
     }
   }
 
   // Mock fallback for development without a wallet
   const handleMockConnect = async () => {
+    setShowWalletModal(false)
     setAuthenticating(true)
     setError(null)
     try {
@@ -151,46 +188,106 @@ export function WalletConnect() {
     try { await disconnectAsync() } catch { /* ignore if not connected */ }
   }
 
+  // Deduplicate connectors by name (wagmi can register duplicates)
+  const uniqueConnectors = connectors.filter((c, i) => {
+    const display = getWalletDisplay(c)
+    return connectors.findIndex((other) => getWalletDisplay(other).name === display.name) === i
+  })
+
   if (isAuthenticated && user) {
     return (
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-neutral-700">
+        <Badge variant="primary" size="md">
           {Number(user.balance).toLocaleString()} U
-        </span>
-        <span className="text-xs text-neutral-500 hidden sm:inline" title={user.wallet_address}>
+        </Badge>
+        <span
+          className="text-xs font-medium text-neutral-500 hidden sm:inline cursor-default"
+          title={user.wallet_address}
+        >
           {user.wallet_address.slice(0, 6)}...{user.wallet_address.slice(-4)}
         </span>
-        <button
-          onClick={handleDisconnect}
-          className="px-3 py-1.5 text-sm rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
-        >
+        <Button variant="secondary" size="sm" onClick={handleDisconnect}>
           Disconnect
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={handleConnect}
-        disabled={authenticating}
-        className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors cursor-pointer"
-      >
-        {authenticating ? 'Signing in...' : 'Connect Wallet'}
-      </button>
-      {!authenticating && (
-        <button
-          onClick={handleMockConnect}
-          className="px-3 py-2 text-sm text-neutral-500 hover:text-neutral-700 transition-colors cursor-pointer"
-          title="Demo mode without wallet"
+    <>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="gradient"
+          size="sm"
+          onClick={() => setShowWalletModal(true)}
+          loading={authenticating}
         >
-          Demo
-        </button>
-      )}
-      {error && (
-        <span className="text-xs text-red-500">{error}</span>
-      )}
-    </div>
+          {authenticating ? 'Signing in...' : 'Connect Wallet'}
+        </Button>
+        {error && (
+          <span className="text-xs text-danger-500">{error}</span>
+        )}
+      </div>
+
+      <Modal
+        open={showWalletModal}
+        onClose={() => setShowWalletModal(false)}
+        title="Connect Wallet"
+      >
+        <div className="space-y-2">
+          {uniqueConnectors.map((connector) => {
+            const display = getWalletDisplay(connector)
+            const isLoading = connectingId === connector.id
+            return (
+              <button
+                key={connector.id}
+                onClick={() => handleConnectWallet(connector)}
+                disabled={isLoading}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-neutral-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group"
+              >
+                <span className="text-2xl">{display.icon}</span>
+                <span className="text-sm font-bold text-neutral-800 group-hover:text-primary-700 transition-colors">
+                  {display.name}
+                </span>
+                {isLoading && (
+                  <svg className="ml-auto h-4 w-4 animate-spin text-primary-500" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                )}
+                {!isLoading && (
+                  <svg className="ml-auto h-4 w-4 text-neutral-300 group-hover:text-primary-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 py-2">
+            <div className="flex-1 h-px bg-neutral-200" />
+            <span className="text-xs font-medium text-neutral-400">or</span>
+            <div className="flex-1 h-px bg-neutral-200" />
+          </div>
+
+          {/* Demo mode */}
+          <button
+            onClick={handleMockConnect}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-neutral-300 hover:border-accent-300 hover:bg-accent-50/50 transition-all duration-200 cursor-pointer group"
+          >
+            <span className="text-2xl">🎮</span>
+            <div className="text-left">
+              <span className="text-sm font-bold text-neutral-700 group-hover:text-accent-700 transition-colors block">
+                Demo Mode
+              </span>
+              <span className="text-xs text-neutral-400">
+                Try without a wallet
+              </span>
+            </div>
+          </button>
+        </div>
+      </Modal>
+    </>
   )
 }

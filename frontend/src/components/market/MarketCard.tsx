@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import type { Market } from '@/lib/types'
+import { Badge } from '@/components/ui/Badge'
 
-const statusColors: Record<string, string> = {
-  open: 'bg-success-100 text-success-700',
-  closed: 'bg-neutral-100 text-neutral-600',
-  resolved: 'bg-primary-100 text-primary-700',
-  cancelled: 'bg-danger-100 text-danger-700',
-  draft: 'bg-neutral-100 text-neutral-500',
+const statusVariant: Record<string, 'success' | 'neutral' | 'primary' | 'danger'> = {
+  open: 'success',
+  closed: 'neutral',
+  resolved: 'primary',
+  cancelled: 'danger',
+  draft: 'neutral',
 }
 
 export function MarketCard({ market }: { market: Market }) {
@@ -18,42 +19,59 @@ export function MarketCard({ market }: { market: Market }) {
     <Link
       href={`/market/${market.id}`}
       data-testid="market-card"
-      className="block p-5 bg-card rounded-xl border border-card-border hover:bg-card-hover hover:shadow-sm transition-all"
+      className="group block bg-card rounded-xl border border-card-border overflow-hidden
+        transition-all duration-300 ease-out
+        hover:shadow-lg hover:-translate-y-1 hover:border-primary-200"
     >
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <h3 className="text-base font-semibold text-neutral-900 leading-tight">
-          {market.title}
-        </h3>
-        <span
-          className={`shrink-0 px-2 py-0.5 text-xs font-medium rounded-full ${
-            statusColors[market.status] || 'bg-neutral-100 text-neutral-600'
-          }`}
-        >
-          {market.status}
-        </span>
-      </div>
+      {/* Gradient top accent */}
+      <div className="h-1 w-full gradient-primary opacity-60 group-hover:opacity-100 transition-opacity" />
 
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-medium text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
-          {market.category}
-        </span>
-      </div>
-
-      {outcomes.length > 0 && (
-        <div className="flex items-center gap-3 mb-3">
-          {outcomes.map((outcome) => (
-            <span key={outcome.id} className="text-sm">
-              <span className="text-neutral-500">{outcome.label}</span>{' '}
-              <span className="font-semibold text-neutral-800">
-                {Math.round(Number(outcome.price) * 100)}¢
-              </span>
-            </span>
-          ))}
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <h3 className="text-base font-bold text-neutral-900 leading-tight group-hover:text-primary-700 transition-colors">
+            {market.title}
+          </h3>
+          <Badge variant={statusVariant[market.status] || 'neutral'}>
+            {market.status}
+          </Badge>
         </div>
-      )}
 
-      <div className="text-xs text-neutral-400">
-        Vol: {Number(market.volume || 0).toLocaleString()} U
+        <div className="mb-4">
+          <Badge variant="neutral" size="sm">
+            {market.category}
+          </Badge>
+        </div>
+
+        {outcomes.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {outcomes.map((outcome) => {
+              const pct = Math.round(Number(outcome.price) * 100)
+              return (
+                <div key={outcome.id} className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-neutral-500 w-10 shrink-0">
+                    {outcome.label}
+                  </span>
+                  <div className="flex-1 h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full gradient-primary transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-neutral-800 tabular-nums w-10 text-right">
+                    {pct}¢
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 text-xs text-neutral-400">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+          </svg>
+          <span className="font-medium">Vol: {Number(market.volume || 0).toLocaleString()} U</span>
+        </div>
       </div>
     </Link>
   )
